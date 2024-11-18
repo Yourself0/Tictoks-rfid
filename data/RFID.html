@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RFID Register</title>
+    <link rel="stylesheet" type="text/css" href="RFID.css">
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <link rel="stylesheet" type="text/css" href="popupCss">
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+</head>
+
+<body>
+    <div class="toolBar">
+        <img src="back" class="backImage" onclick="backSubmit()">
+        <h3 class="toolBar-header" onclick="HomePage()">RFID</h3>
+        <div></div>
+    </div>
+    <div class="container">
+        <div class="card">
+            <h3>RFID Register</h3>
+            <table>
+                <tr>
+                    <th>RFID Id</th>
+                    <th>Employee Id</th>
+                </tr>
+                <tbody id="rfidTableBody">
+                    <!-- Rows will be appended here by the WebSocket -->
+                </tbody>
+
+            </table>
+
+            <button type="button" class="btn btn-primary submit-button" onclick="submit()">Submit</button>
+        </div>
+    </div>
+
+    <!-- ************UPDATE SUCCESS MODAL************** -->
+    <div id="myModal_success" class="myModal_success">
+        <div class="modal-content">
+            <span class="close" onclick="PopupCancel()">&times;</span>
+            <div class="successTool">
+
+                <h3>Success</h3>
+            </div>
+            <div class="popImg">
+                <img src="/successImg" class="SuccessImg">
+            </div>
+            <div class="popupDiv" id="form">
+                <h3 class="SuccessText">Successfully Registered</h3>
+            </div>
+            <div class="text-center">
+                <button class="btn-primary-Alertok" onclick="PopupCancel()">ok</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ************ RFID UID MODAL************** -->
+    <div id="Rfid_Uid_Modal" class="myModal_success">
+        <div class="modal-content">
+            <span class="close" onclick="PopupCancel()">&times;</span>
+            <div class="successTool">
+
+                <h3>Re-Entenring Card</h3>
+            </div>
+            <div class="popImg">
+            </div>
+            <div class="popupDiv" id="form">
+                <h3 class="SuccessText">Already Rfid is Available in Registry
+                </h3>
+
+            </div>
+            <div class="text-center">
+                <button class="btn-primary-Alertok" onclick="PopupVerified()">ok</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function backSubmit() {
+            location.replace("/")
+        }
+        var ReregistryRfid = "";
+        document.addEventListener('DOMContentLoaded', () => {
+            EmployeeInfoLists().then(data => {
+                employeesData = data;
+                populateEmployeeSelect(data);
+            }).catch(error => {
+                console.error('Error fetching data:', error);
+            });
+        });
+
+        var WifiStatus = new WebSocket('ws://' + window.location.hostname + '/Status');
+        let employeesData = null;
+        function convertCsvToJson(csvData) {
+            const rows = csvData.split('\n');
+            const jsonData = [];
+            for (let i = 0; i < rows.length; i++) {
+                const currentRow = rows[i].split(',');
+                if (currentRow[2] !== undefined && currentRow[3] !== undefined && currentRow[4] !== undefined) {
+                    const employeeData = {
+                        employeeId: currentRow[2],
+                        name: currentRow[3],
+                        department: currentRow[4]
+                    };
+                    jsonData.push(employeeData);
+                }
+            }
+            return jsonData;
+        }
+        function EmployeeInfoLists() {
+            return fetch('/EmployeeLists')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                        var modal = document.getElementById('myModal_error');
+                        modal.style.display = 'block';
+                    }
+                    return response.text();
+                })
+                .then(csvData => {
+                    const jsonData = convertCsvToJson(csvData);
+
+                    return jsonData;
+                })
+                .catch(error => {
+                    console.error('There was a problem with the fetch operation:', error);
+                    throw error;
+                });
+        }
+
+        function populateEmployeeSelect(data) {
+            const selectElement = document.getElementById('employeeSelect');
+            const selectedEmployees = [];
+            selectElement.querySelectorAll('option').forEach(option => {
+                if (option.selected) {
+                    console.log(option.value);
+                    selectedEmployees.push(option.value);
+                }
+            });
+            data.forEach(employee => {
+                const option = document.createElement('option');
+                option.value = employee.employeeId;
+
+                if (selectedEmployees.includes(employee.employeeId)) {
+                    option.disabled = true;
+                }
+                option.textContent = `${employee.employeeId} - ${employee.name} (${employee.department})`;
+                selectElement.appendChild(option);
+            });
+        }
+
+        // The WebSocket functionality
+        // var webSocket = new WebSocket('ws://' + window.location.hostname + '/ws');
+        // var selectedEmployeeIds = new Set();
+        // webSocket.onmessage = function (event) {
+        //     var data = JSON.parse(event.data);
+        //     var tableBody = document.getElementById('rfidTableBody');
+        //     var isDuplicate = Array.from(tableBody.children).some(function (row) {
+        //         return row.firstChild.textContent === data.rfid;
+        //     });
+        //     if (!isDuplicate) {
+        //         var row = document.createElement('tr');
+        //         var rfidCell = document.createElement('td');
+        //         rfidCell.textContent = data.rfid;
+        //         row.appendChild(rfidCell);
+        //         var employeeInfoCell = document.createElement('td');
+        //         var select = document.createElement('select');
+        //         var employeeDetails = document.createElement('span');
+        //         employeeInfoCell.appendChild(select);
+        //         employeeInfoCell.appendChild(employeeDetails);
+        //         employeesData.forEach(function (employee) {
+        //             var option = document.createElement('option');
+        //             option.value = employee.employeeId;
+        //             option.textContent = employee.employeeId + " - " + employee.name + " - " + employee.department;
+        //             if (selectedEmployeeIds.has(employee.employeeId)) {
+        //                 option.disabled = true;
+        //             }
+        //             select.appendChild(option);
+        //         });
+        //         select.addEventListener('change', function () {
+        //             var selectedEmployeeId = select.value;
+        //             selectedEmployeeIds.add(selectedEmployeeId);
+        //             tableBody.querySelectorAll('select').forEach(function (selectElement) {
+        //                 selectElement.querySelectorAll('option').forEach(function (option) {
+        //                     if (option.value === selectedEmployeeId) {
+        //                         option.disabled = true;
+        //                     }
+        //                 });
+        //             });
+        //             var selectedEmployee = employeesData.find(function (employee) {
+        //                 return employee.employeeId === selectedEmployeeId;
+        //             });
+        //             employeeDetails.textContent = `ID: ${selectedEmployee.employeeId}`;
+        //         });
+        //         row.appendChild(employeeInfoCell);
+        //         tableBody.appendChild(row);
+        //     } else {
+        //         // alert("Rfid Id is already in registry : " + data.rfid);
+        //         var modal = document.getElementById('Rfid_Uid_Modal');
+        //         modal.style.display = 'block';
+        //         ReregistryRfid = data.rfid;
+        //     }
+        // };
+        var webSocket = new WebSocket('ws://' + window.location.hostname + '/ws');
+        var selectedEmployeeIds = new Set();
+        webSocket.onmessage = function (event) {
+    var data = JSON.parse(event.data);
+    var tableBody = document.getElementById('rfidTableBody');
+    var isDuplicate = Array.from(tableBody.children).some(function (row) {
+        return row.firstChild.textContent === data.rfid;
+    });
+    if (!isDuplicate) {
+        var row = document.createElement('tr');
+        var rfidCell = document.createElement('td');
+        rfidCell.textContent = data.rfid;
+        row.appendChild(rfidCell);
+        
+        // Employee select dropdown for each row
+        var employeeInfoCell = document.createElement('td');
+        var select = document.createElement('select');
+        
+        // Adding initial "Select Employee" option
+        var initialOption = document.createElement('option');
+        initialOption.value = '';
+        initialOption.textContent = 'Select Employee';
+        initialOption.disabled = true; // Disable the initial option
+        initialOption.selected = true; // Select the initial option by default
+        select.appendChild(initialOption);
+
+        var employeeDetails = document.createElement('span');
+        employeeInfoCell.appendChild(select);
+        employeeInfoCell.appendChild(employeeDetails);
+        
+        employeesData.forEach(function (employee) {
+            var option = document.createElement('option');
+            option.value = employee.employeeId;
+            option.textContent = `${employee.employeeId} - ${employee.name} - ${employee.department}`;
+            if (selectedEmployeeIds.has(employee.employeeId)) {
+                option.disabled = true;
+            }
+            select.appendChild(option);
+        });
+        
+        select.addEventListener('change', function () {
+            var selectedEmployeeId = select.value;
+            selectedEmployeeIds.add(selectedEmployeeId);
+            tableBody.querySelectorAll('select').forEach(function (selectElement) {
+                selectElement.querySelectorAll('option').forEach(function (option) {
+                    if (option.value === selectedEmployeeId) {
+                        option.disabled = true;
+                    }
+                });
+            });
+            var selectedEmployee = employeesData.find(function (employee) {
+                return employee.employeeId === selectedEmployeeId;
+            });
+            employeeDetails.textContent = `ID: ${selectedEmployee.employeeId}`;
+        });
+
+        row.appendChild(employeeInfoCell);
+        tableBody.appendChild(row);
+    } else {
+        var modal = document.getElementById('Rfid_Uid_Modal');
+        modal.style.display = 'block';
+        ReregistryRfid = data.rfid;
+    }
+};
+
+        function submit() {
+            var tableBody = document.getElementById('rfidTableBody');
+            var selectedData = [];
+
+            for (var i = 0; i < tableBody.rows.length; i++) {
+                var row = tableBody.rows[i];
+                var rfid = row.cells[0].textContent;
+                var rowDatasSecond = row.cells[1].textContent;
+                var employeeIds = rowDatasSecond.split(",")
+                employeeIds = employeeIds[0].split(":");
+
+                var selectedValue;
+                if (employeeIds[1] !== undefined) {
+                    selectedValue = employeeIds[1];
+                }
+                else {
+                    var employeeIds_spl = employeeIds[0].split("-");
+                    selectedValue = employeeIds_spl[0];
+                    console.log(selectedValue);
+                }
+                var rowData = {
+                    rfid: rfid,
+                    employeeId: selectedValue,
+                };
+                selectedData.push(rowData);
+            }
+            var xhttp = new XMLHttpRequest();
+            xhttp.open("POST", '/RfiduidUpdate', true);
+            xhttp.setRequestHeader("Content-Type", "application/json");
+            xhttp.onload = function () {
+                if (xhttp.status >= 200 && xhttp.status < 300) {
+                    var modal = document.getElementById('myModal_success');
+                    modal.style.display = 'block';
+                } else {
+                    console.error("Request failed with status:", xhttp.status);
+                }
+            }
+            xhttp.send(JSON.stringify(selectedData));
+        }
+        function PopupCancel() {
+            location.replace("/")
+        }
+        function PopupVerified() {
+            var modal = document.getElementById('Rfid_Uid_Modal');
+            modal.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
