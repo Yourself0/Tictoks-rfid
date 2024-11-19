@@ -83,6 +83,19 @@ WiFiClient client;
 // IPAddress gateway(192, 168, 1, 1);    // Assigning a gateway IP address, assuming it's 192.168.1.1
 // IPAddress subnet(255, 255, 255, 0);   // Assigning a subnet mask, such as 255.255.255.0
 
+TaskHandle_t WiFiscanTaskHandleC;
+TaskHandle_t WifiStatusDataC = NULL;
+TaskHandle_t UpdateEmployeeDetailC = NULL;
+TaskHandle_t OpenDoorC = NULL;
+TaskHandle_t CloseDoorC = NULL;
+TaskHandle_t SdOfflineDataC = NULL;
+TaskHandle_t printTaskHandleC = NULL;
+TaskHandle_t OrganisationStatusC = NULL;
+
+void rfidInitialList();
+void OfflineDataWrite(String empId);
+
+
 void printFreeHeap(const char *position)
 {
   Serial.print(position);
@@ -172,25 +185,25 @@ void fileReadAndWrite()
     {
       continue;
     }
-    // String Rfid = line.substring(0, commaIndex);
+    String Rfid = line.substring(0, commaIndex);
     // String DeviceIds = line.substring(commaIndex + 1, secondCommaIndex);
     String Empid = line.substring(secondCommaIndex + 1, thirdCommaIndex);
-    String BioTemplateId = line.substring(fifthCommaIndex + 1, sixthCommaIndex);
-    String BioRegsStatus = line.substring(sixthCommaIndex + 1);
+    // String BioTemplateId = line.substring(fifthCommaIndex + 1, sixthCommaIndex);
+    // String BioRegsStatus = line.substring(sixthCommaIndex + 1);
 
-    Serial.println("BioRegsStatus: " + BioRegsStatus);
-    Serial.println("Bio Temp" + BioTemplateId);
-    int BioTemplateIntId = BioTemplateId.toInt();
-    int BioRegsIntStatus = BioRegsStatus.toInt();
-    Serial.print("bio Int id ");
-    Serial.println(BioTemplateIntId);
+    // Serial.println("BioRegsStatus: " + BioRegsStatus);
+    // Serial.println("Bio Temp" + BioTemplateId);
+    // int BioTemplateIntId = BioTemplateId.toInt();
+    // int BioRegsIntStatus = BioRegsStatus.toInt();
+    // Serial.print("bio Int id ");
+    // Serial.println(BioTemplateIntId);
     esp_task_wdt_reset();
-    if (BioTemplateIntId > 0)
+    if (Rfid.length() > 0)
     {
-      if (BioRegsIntStatus == 1)
+      if (Rfid != "-")
       {
         esp_task_wdt_reset();
-        String content = BioTemplateId + String(",") + Empid + "\n";
+        String content = Rfid + String(",") + Empid + "\n";
         Serial.print("Inside Content : ");
         Serial.println(content);
         data.print(content);
@@ -814,6 +827,7 @@ void WiFiscanTask(void *pvParameters)
 
 */
 
+/*
 void SpiffsOfflineData(void *parameter)
 {
   for (;;)
@@ -957,6 +971,9 @@ void SpiffsOfflineData(void *parameter)
     vTaskDelay(10000 / portTICK_PERIOD_MS);
   }
 }
+
+*/
+
 
 long TokenVerifications()
 {
@@ -1156,11 +1173,15 @@ void updateEmployeeDetails(void *pvParameters)
   }
 }
 
+
+
+/*
+
 void initializeCoreWork()
 {
   // Creating the WiFi scanning task on core 0
 
-  /*
+  
   xTaskCreatePinnedToCore(
       WiFiscanTask,
       "WiFiscan",
@@ -1169,7 +1190,6 @@ void initializeCoreWork()
       &WiFiscanTaskHandle,
       1
   );
-  */
 
   // Update Employee Details
   xTaskCreatePinnedToCore(
@@ -1194,6 +1214,333 @@ void initializeCoreWork()
 
   //  xTaskNotify(SpiffsOfflineDataC, 1, eSetValueWithOverwrite); // Notify the task
 }
+*/
+
+
+
+void SdOfflineData(void *parameter)
+{
+  while (true)
+  {
+    SpiffsTimerStart = true;
+    Serial.println("Spiffs Start :" + String(SpiffsTimerStart));
+    if (SpiffsTimerStart)
+    {
+      Serial.println("Sending offline data to server");
+      Serial.println("Wifi status connected :" + String(WebsocketConnected));
+
+      if (WiFi.status() == WL_CONNECTED)
+      {
+        digitalWrite(ORANGELED, LOW);
+        Network_status = false;
+        if (client.connect("www.google.com", 80))
+        {
+          HTTPClient http; // Declare object of class HTTPClient
+
+          Network_status = true;
+          if (SPIFFS.exists("/OfflineData.csv"))
+          {
+            File csv = SPIFFS.open("/OfflineData.csv", "r");
+            if (!csv)
+            {
+              Serial.println("Failed to open file");
+              continue;
+            }
+
+            Serial.println("Connected to Internet ./");
+            Serial.println("Wifi status connected " + String(WebsocketConnected));
+            if (csv.available())
+            {
+              Serial.println("Sending Offline data to server");
+              const byte BUFFER_SIZE = 200;
+              char buffer[BUFFER_SIZE + 1];
+              buffer[BUFFER_SIZE] = '\0';
+              int file_count = 0;
+              int success_count = 0;
+
+              while (csv.available())
+              {
+                int count = 0;
+                file_count += 1;
+                Serial.println("file read fun");
+                String line = csv.readStringUntil('\n');
+                Serial.println("line");
+                Serial.print(line);
+
+                strncpy(buffer, line.c_str(), sizeof(buffer));
+                char *ptr = strtok(buffer, ",");
+                int j = 0;
+                String EmpId, Date, Temp_Time;
+                while (ptr != NULL)
+                {
+                  if (j == 0)
+                  {
+                    EmpId = ptr;
+                  }
+                  else if (j == 1)
+                  {
+                    Date = ptr;
+                  }
+                  else if (j == 2)
+                  {
+                    Temp_Time = ptr;
+                  }
+                  j++;
+                  ptr = strtok(NULL, ",");
+                }
+
+                Serial.println("");
+                Serial.print("Company id: ");
+                Serial.println(CompanyId);
+                Serial.print("EmployeeID: ");
+                Serial.println(EmpId);
+                Serial.print("Date: ");
+                Serial.println(Date);
+                Serial.print("Time: ");
+                Serial.println(Temp_Time);
+
+                if (EmpId != "")
+                {
+                  String Time = "";
+                  for (int i = 0; i < Temp_Time.length(); i++)
+                  {
+                    char currentChar = Temp_Time.charAt(i);
+                    if (currentChar != '\r')
+                    {
+                      Time += currentChar;
+                    }
+                  }
+
+                  DynamicJsonBuffer JSONbuffer;
+                  JsonObject &JSONencoder = JSONbuffer.createObject();
+                  JSONencoder["employeeId"] = EmpId;
+                  JSONencoder["companyId"] = CompanyId;
+                  JSONencoder["deviceType"] = DeviceType;
+                  JSONencoder["date"] = Date;
+                  JSONencoder["time"] = Time;
+                  char JSONmessageBuffer[300];
+                  JSONencoder.printTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+                  Serial.print("JSON MESSAGE server send");
+                  Serial.println(JSONmessageBuffer);
+
+                  http.begin("http://3.6.171.29:8080/EmployeeAttendenceAPI/employee/EmployeeCheckInOut");
+                  http.addHeader("Content-Type", "application/json");
+                  Serial.println("Here after content type");
+                  int httpCode = http.POST(JSONmessageBuffer);
+                  Serial.print("HttpCode:");
+                  Serial.println(httpCode);
+
+                  if (httpCode == 200)
+                  {
+                    Serial.println("Data Send Successfully");
+                    success_count += 1;
+                  }
+                  else
+                  {
+                    count++;
+                  }
+                  http.end();
+                  if (count > 3)
+                  {
+                    break;
+                  }
+                }
+              }
+              csv.close();
+              SPIFFS.remove("/OfflineData.csv");
+            }
+          }
+          else
+          {
+            Serial.println("File Does Not Exist");
+          }
+        }
+        else
+        {
+          Serial.println("Internet is Not Available ........ ... ... ..");
+          Network_status = false;
+        }
+      }
+      else
+      {
+        Serial.println("WiFi was not connected offline data ");
+        Serial.println("Websocket status: " + String(WebsocketConnected));
+        Network_status = false;
+        digitalWrite(ORANGELED, HIGH);
+        int stationCount = WiFi.softAPgetStationNum();
+        Serial.print("Station Count");
+        Serial.println(stationCount);
+        if (stationCount == 0)
+        {
+          WifiConnectCheck();
+        }
+      }
+      Serial.println("End of send server ");
+    }
+    vTaskDelay(pdMS_TO_TICKS(60000));
+  }
+}
+
+
+void wifiStatusData(void *pvParameters)
+{
+  (void)pvParameters;
+  while (true)
+  {
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      if (client.connect("www.google.com", 80))
+      {
+        WifiStatusConnected();
+        client.stop(); // Close the connection
+      }
+      else
+      {
+        // ws1.textAll("Internet Not Available");
+      }
+    }
+    else
+    {
+      WifiStatusNotConnected();
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(10000)); // Delay for 10 seconds
+  }
+}
+
+// Open Door
+void OpenDoor(void *pvParameters)
+{
+  (void)pvParameters; // Unused parameter
+
+  pinMode(GREENLED, OUTPUT);
+  pinMode(GREENLED1, OUTPUT);
+  pinMode(Relay, OUTPUT);
+  pinMode(Buzzer, OUTPUT);
+
+  while (true)
+  {
+    if (OpenDoors)
+    {
+      Serial.println("Inside Open Door ");
+      OpenDoors = false;
+      digitalWrite(GREENLED, HIGH);
+      digitalWrite(GREENLED1, HIGH);
+      digitalWrite(Relay, HIGH);
+      digitalWrite(Buzzer, HIGH);
+      vTaskDelay(pdMS_TO_TICKS(300));
+      vTaskDelay(pdMS_TO_TICKS(200));
+      digitalWrite(Buzzer, LOW);
+      vTaskDelay(pdMS_TO_TICKS(4000));
+      digitalWrite(GREENLED, LOW);
+      digitalWrite(GREENLED1, LOW);
+      digitalWrite(Relay, LOW);
+    }
+    else
+    {
+      vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+  }
+}
+
+// Close Door
+void CloseDoor(void *pvParameters)
+{
+  (void)pvParameters; // Unused parameter
+
+  pinMode(REDLED, OUTPUT);
+  pinMode(REDLED1, OUTPUT);
+  pinMode(Relay, OUTPUT);
+  pinMode(Buzzer, OUTPUT);
+
+  while (true)
+  {
+    if (CloseDoors)
+    {
+      Serial.println("Inside Close Door");
+      digitalWrite(REDLED, HIGH);
+      digitalWrite(REDLED1, HIGH);
+      digitalWrite(GREENLED1, LOW);
+      digitalWrite(GREENLED, LOW);
+      CloseDoors = false;
+      for (int i = 0; i < 2; i++)
+      {                    // Repeat the pattern 3 times
+        tone(Buzzer, 800); // Play the beep tone
+        delay(500);        // Wait for the specified duration
+        noTone(Buzzer);    // Stop the tone
+        delay(500);
+      }
+      vTaskDelay(pdMS_TO_TICKS(2000));
+      digitalWrite(REDLED, LOW);
+      digitalWrite(REDLED1, LOW);
+      // UnauthorizedAccess();
+    }
+    else
+    {
+      vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+  }
+}
+
+
+void initializeCoreWork()
+{
+  // Check WiFi status data task, assigned highest priority
+  xTaskCreate(
+      wifiStatusData,   // Task function
+      "WifiStatusData", // Task name
+      8192,             // Stack size (bytes)
+      NULL,             // Task input parameter
+      2,                // Lower Priority
+      &WifiStatusDataC  // Task handle
+  );
+
+  // Offline Data Sync, lower priority now
+  xTaskCreate(
+      SdOfflineData,   // Task function
+      "SdOfflineData", // Task name
+      8192,            // Stack size (bytes)
+      NULL,            // Task input parameter
+      2,
+      &SdOfflineDataC // Task handle
+  );
+
+  // Open Door task, high priority since it deals with physical security
+  xTaskCreate(
+      OpenDoor,   // Task function
+      "OpenDoor", // Task name
+      2048,       // Stack size (bytes)
+      NULL,       // Task input parameter
+      4,          // Priority (High)
+      &OpenDoorC  // Task handle
+  );
+
+  // Close Door task, slightly lower priority than open door
+  xTaskCreate(
+      CloseDoor,   // Task function
+      "CloseDoor", // Task name
+      2048,        // Stack size (bytes)
+      NULL,        // Task input parameter
+      4,           // Priority (Mid-High)
+      &CloseDoorC  // Task handle
+  );
+
+  // Organization status task, standard priority
+
+  // Uncomment this if needed, with appropriate priority
+  xTaskCreate(
+      updateEmployeeDetails,  // Task function
+      "UpdateEmployee",       // Task name
+      8192,                   // Stack size (bytes)
+      NULL,                   // Task input parameter
+      2,                      // Priority (Lower)
+      &UpdateEmployeeDetailC  // Task handle
+  );
+  
+}
+
+
+
 
 // WebSocket event Handle
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
@@ -3053,7 +3400,164 @@ void sendMessageToWsClient(String rfid)
   ws.textAll(message);
 }
 
+
+
+int ServerSend(String Empid, String companyId)
+{
+  Serial.print("Empid ");
+  Serial.println(Empid);
+  Serial.print("COMPANY ID ");
+  Serial.println(companyId);
+  DynamicJsonBuffer JSONbuffer;
+  JsonObject &JSONencoder = JSONbuffer.createObject();
+  DateTime now = rtc.now();
+  Serial.print("Current time: ");
+  Serial.print(now.year(), DEC);
+  Serial.print('/');
+  Serial.print(now.month(), DEC);
+  Serial.print('/');
+  Serial.print(now.day(), DEC);
+  Serial.print(" ");
+  Serial.print(now.hour(), DEC);
+  Serial.print(':');
+  Serial.print(now.minute(), DEC);
+  Serial.print(':');
+  Serial.print(now.second(), DEC);
+  Serial.println();
+  Serial.println("Sending data TO Backend");
+  HTTPClient http; // Declare object of class HTTPClient
+  JSONencoder["employeeId"] = Empid;
+  JSONencoder["rfid"] = "-";
+  JSONencoder["deviceId"] = DeviceId;
+  JSONencoder["companyId"] = companyId;
+  JSONencoder["deviceType"] = DeviceType;
+  JSONencoder["date"] = String(now.year()) + String("-") + String(now.month(), DEC) + String("-") + String(now.day());
+  JSONencoder["time"] = String(now.hour()) + String(":") + String(now.minute()) + String(":") + String(now.second());
+  Serial.println(String(now.hour()) + String(":") + String(now.minute()) + String(":") + String(now.second()));
+  char JSONmessageBuffer[300];
+  JSONencoder.printTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+  Serial.print("JSON MESSAGE server send");
+  Serial.println(JSONmessageBuffer);
+  http.begin("http://3.6.171.29:8080/EmployeeAttendenceAPI/employee/EmployeeCheckInOut"); // Specify request destination
+  http.addHeader("Content-Type", "application/json");                                         // Specify content-type header
+  Serial.println("Here after content type");
+  int httpCode = http.POST(JSONmessageBuffer); // Send the request
+  Serial.print("HttpCode:");
+  Serial.println(httpCode);
+  if (httpCode == 200)
+  {
+    Serial.println("inside http code ");
+    DynamicJsonBuffer jsonBuffer(300);
+    // Parse JSON object
+    Serial.println("parse json");
+    JsonObject &root = jsonBuffer.parseObject(http.getString());
+    root.printTo(Serial);
+    Serial.println("json object");
+    const char *code = root["employeeId"];
+    const char *department = root["department"];
+    const char *retStatus = root["status"];
+    const char *printStatus = root["status"];
+    const char *userName = root["employeeName"];
+    const char *OrganizationStatusF = root["organizationStatus"];
+    Serial.print("Code return element = ");
+    Serial.println("EmployeeId ");
+    Serial.println(code);
+    Serial.println("Employee name ");
+    Serial.println(userName);
+    Serial.println("Status name ");
+    Serial.println(printStatus);
+    Serial.print("Org Status");
+    Serial.print(OrganizationStatusF);
+    if (strcmp(OrganizationStatusF, "Active") == 0)
+    {
+      Serial.println("inside the organization status");
+      if ((strcmp(retStatus, "CHECKIN") == 0))
+      {
+        Serial.println("Inside Open Door send Server");
+        OpenDoors = true;
+        return -1;
+        // Fetching = true;
+      }
+      else if ((strcmp(retStatus, "CHECKOUT") == 0))
+      {
+        // OpenDoor();
+        OpenDoors = true;
+        return -1;
+        // Fetching = true;
+      }
+      else if (strcmp(retStatus, "SAME_TIME") == 0)
+      {
+        OpenDoors = true;
+        // Fetching = true;
+        return -1;
+      }
+      else if ((strcmp(retStatus, "BLOCKED") == 0))
+      {
+        UnauthorizedAccess();
+        CloseDoors = true;
+        digitalWrite(REDLED, HIGH); // turn the LED off.
+        digitalWrite(REDLED1, HIGH);
+        return -1;
+        // Fetching = true;
+      } //                          NOT_VAILD
+      else if ((strcmp(retStatus, "NOT_VAILD") == 0))
+      {
+        UnauthorizedAccess();
+        digitalWrite(REDLED, HIGH); // turn the LED off.
+        digitalWrite(REDLED1, HIGH);
+        CloseDoors = true;
+        return -1;
+        // Fetching = true;
+      }
+      else if ((strcmp(retStatus, "Employee_Not_Assigned_To_The_Device") == 0))
+      {
+        UnauthorizedAccess();
+        CloseDoors = true;
+        digitalWrite(REDLED, HIGH); // turn the LED off.
+        digitalWrite(REDLED1, HIGH);
+        // Fetching = true;
+        return -1;
+      }
+      else if ((strcmp(retStatus, "RFID_NO_Is_Not_Mapped_To_Any_Employee") == 0))
+      {
+        UnauthorizedAccess();
+        CloseDoors = true;
+        digitalWrite(REDLED, HIGH); // turn the LED off.
+        digitalWrite(REDLED1, HIGH);
+        // Fetching = true;
+        return -1;
+      }
+      else
+      {
+        Serial.print("Wrong method followed");
+        // Fetching = true;
+        return -1;
+      }
+      Serial.println(httpCode); // Print HTTP return code
+    }
+    else
+    {
+      // Organization is not Active
+    }
+  }
+  // NOT_VAILD
+  else
+  {
+    Serial.println("could not send back to server ");
+    OfflineDataWrite(Empid); // if response failed but valid employee
+    OpenDoors = true;
+  }
+
+  http.end(); // Close connection
+  Serial.println("Succesfully Send Data To BackEnd");
+  // delay(1000);
+  return 1;
+}
+
+
+
 // Function For Sending data to Backend
+/*
 void ServerSend(String empId, String companyId)
 {
   Serial.print("EMPID");
@@ -3199,7 +3703,7 @@ void ServerSend(String empId, String companyId)
   digitalWrite(GREENLED1, HIGH);
   delay(1000);
 }
-
+*/
 // Function for writting data in SPIFFS in offline data
 void OfflineDataWrite(String empId)
 {
@@ -3227,7 +3731,115 @@ void OfflineDataWrite(String empId)
   Serial.println("File closed");
 }
 
+
+// Match rfid File
+
+
+bool matchRfid(String MatchedRfid)
+{
+  bool validRfid = false;
+  String Empid;
+
+  Serial.println("Inside matchRfid function");
+  Serial.print("RFID ID: ");
+  Serial.println(MatchedRfid);
+
+  // Open the file from SPIFFS
+  File datafilesRfid = SPIFFS.open("/EmpRfid.csv", "r");
+  if (!datafilesRfid)
+  {
+    Serial.println("Failed to open file for reading");
+    return false;
+  }
+
+  // Read the file line by line
+  while (datafilesRfid.available())
+  {
+    String line = datafilesRfid.readStringUntil('\n');
+    Serial.print("Line: ");
+    Serial.println(line);
+
+    // Find the comma separating ID and Empid
+    int commaIndex = line.indexOf(',');
+    if (commaIndex == -1)
+    {
+      continue; // Skip lines that don't have a comma
+    }
+
+    // Extract ID and Empid from the line
+    String rfidfile = line.substring(0, commaIndex);
+    Empid = line.substring(commaIndex + 1); // Assuming Empid is the second value
+    Serial.println("Empid check: " + Empid);
+
+    // Check if the fingerprint ID matches
+    if (MatchedRfid == rfidfile)
+    {
+      Serial.println("ID Found");
+      validRfid = true;
+      digitalWrite(GREENLED, HIGH);
+      digitalWrite(GREENLED1, HIGH);
+      break; // Exit the loop if ID is found
+    }
+  }
+
+  // Close the file
+  datafilesRfid.close();
+
+  // Handle the result
+  Serial.println("Checking conditions for door open");
+  Serial.print("rfidFound: ");
+  Serial.println(validRfid);
+  esp_task_wdt_reset();
+  if (validRfid)
+  {
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      if (client.connect("www.google.com", 80))
+      {
+        esp_task_wdt_reset();
+        Serial.println("Connected to server, sending data");
+        ServerSend(Empid, CompanyId); // Implement this function based on your needs
+      }
+      else
+      {
+        Serial.println("Failed to connect to server");
+        Serial.println("OFFLINE Preparation");
+        Serial.println("DOOR OPEN");
+        OfflineDataWrite(Empid); // Implement this function based on your needs
+        OpenDoors = true;
+      }
+    }
+    else
+    {
+      Serial.println("WiFi not connected");
+      Serial.println("OFFLINE Preparation");
+      Serial.println("DOOR OPEN");
+      OfflineDataWrite(Empid); // Implement this function based on your needs
+      OpenDoors = true;
+    }
+  }
+  else
+  {
+    Serial.println("Unauthorized access here");
+    digitalWrite(REDLED, HIGH);
+    digitalWrite(REDLED1, HIGH);
+    digitalWrite(GREENLED1, LOW);
+    digitalWrite(GREENLED, LOW);
+    UnauthorizedAccess(); // Implement this function based on your needs
+    vTaskDelay(pdMS_TO_TICKS(300));
+    digitalWrite(REDLED, LOW);
+    digitalWrite(REDLED1, LOW);
+  }
+
+  vTaskDelay(pdMS_TO_TICKS(2000));
+  return validRfid;
+}
+
+
+
+
 // Function for checking rfid with employee rfid and getting employee's info
+/*
 bool matchRfid(String rfid)
 {
   if (!SPIFFS.begin())
@@ -3342,7 +3954,7 @@ bool matchRfid(String rfid)
   }
   return rfidFound;
 }
-
+*/
 // TODO :
 void softAp()
 {
