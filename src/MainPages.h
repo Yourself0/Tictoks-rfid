@@ -1,4 +1,7 @@
 const char Mainpage[] PROGMEM = R"=====(
+
+
+
 <!DOCTYPE html>
 <html>
 
@@ -11,7 +14,7 @@ const char Mainpage[] PROGMEM = R"=====(
     <link rel="stylesheet" type="text/css" href="/popupCss">
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     <script src="/quickSetting.js"></script>
-                 
+
 
     <style type="text/css" id="stylesheets">
         circle#circle {
@@ -76,25 +79,222 @@ const char Mainpage[] PROGMEM = R"=====(
             font-weight: bolder;
             stroke-width: 2;
         }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: 250px;
+            background-color: #333;
+            color: #fff;
+            position: fixed;
+            top: 0;
+            left: -250px;
+            height: 100%;
+            padding-top: 60px;
+            transition: 0.3s;
+            z-index: 2;
+        }
+
+        .sidebar h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 15px 20px;
+            color: #fff;
+            text-decoration: none;
+            transition: 0.3s;
+        }
+
+        .sidebar a:hover {
+            background-color: #575757;
+        }
+
+        .sidebar.active {
+            left: 0;
+        }
+
+        /* Main Content Styling */
+        .content {
+            flex: 1;
+            padding: 20px;
+            margin-left: 250px;
+            transition: margin-left 0.3s;
+        }
+
+        /* Top Navigation Bar */
+        .topnav {
+            width: 100%;
+            height: 40px;
+            background-color: #c76bff;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .toolBar-main {
+            position: relative;
+            width: 100%;
+            text-align: center;
+        }
+
+        .toolBar-header-main {
+            font-size: 18px;
+            margin: 0;
+        }
+
+        /* Settings Icon Positioned Right */
+        .settings-icon {
+            position: absolute;
+            right: 20px;
+            /* Adjusts right alignment */
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .container.main-card {
+            margin: 10%;
+        }
+
+        /* Responsive Sidebar - Mobile */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 200px;
+            }
+
+            .content {
+                margin-left: 0;
+                padding-top: 60px;
+            }
+        }
     </style>
 </head>
 
 <script>
+    function AuthCheck() {
+        var passwordElement = document.getElementById("txtPassword");
+        var vpasswordElement = document.getElementById("txtConfirmPassword");
+        var submitButton = document.getElementById("button1");
+        var errorElement = document.getElementById("error1");
+        var modal = document.getElementById('myModal');
+
+        if (passwordElement && vpasswordElement && errorElement && modal) {
+            var password = passwordElement.value;
+            var vpassword = vpasswordElement.value;
+
+            if (password === 'admin' && vpassword === 'admin') {
+                submitButton.disabled = false;
+
+            } else {
+                submitButton.disabled = true;
+            }
+        }
+    }
+
     function wifiPage() {
         var modal = document.getElementById('myModal');
         modal.style.display = 'block';
         document.getElementById("button1").addEventListener("click", validation);
+
         function validation() {
-            location.replace("/WifiSetting")
+            Verification()
+                .then(otp => {
+                    if (otp) {
+                        console.log('Received OTP:', otp);
+                        return ValidationCheck(otp, "WifiPage");
+                    } else {
+                        console.error('Received empty OTP');
+                    }
+                })
+                .then(status => {
+                    console.log("Validation status:", status);
+                    if (status >= 200 && status < 300) {
+                        location.replace('/WifiSetting');
+                    } else {
+                        console.error("Validation failed with status:", status);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during validation:', error);
+                });
         }
+    }
+
+    function Verification() {
+        return fetch('/OtpVerify')
+            .then(response => {
+                if (!response.ok) {
+                    console.error('Network response was not ok');
+                    throw new Error('Network response was not ok');
+                }
+                return response.text();
+            })
+            .catch(error => {
+                console.error('Error fetching OTP:', error);
+                throw error;
+            });
+    }
+
+    function ValidationCheck(otp, url) {
+        return new Promise((resolve, reject) => {
+            var xhttp = new XMLHttpRequest();
+            var requestUrl = "/OtpVerificationChk" + url;
+
+            console.log("Request URL:", requestUrl);
+
+            xhttp.open("POST", requestUrl, true);
+            xhttp.setRequestHeader("Content-Type", "application/json");
+            xhttp.onload = function () {
+                if (xhttp.status >= 200 && xhttp.status < 300) {
+                    console.log("Connected");
+                    resolve(xhttp.status);
+                } else {
+                    console.error("Request failed with status:", xhttp.status);
+                    reject(xhttp.status);
+                }
+            };
+            xhttp.onerror = function () {
+                console.error("Request failed:", xhttp.status);
+                reject(xhttp.status);
+            };
+            xhttp.send(JSON.stringify({ OtpVerify: otp }));
+        });
     }
 
     function CompanyPage() {
         var modal = document.getElementById('myModal');
         modal.style.display = 'block';
         document.getElementById("button1").addEventListener("click", validation);
+
         function validation() {
-            location.replace("/CompanySetting")
+            Verification()
+                .then(otp => {
+                    if (otp) {
+                        console.log('Received OTP:', otp);
+                        return ValidationCheck(otp, "CompanyPage");
+                    } else {
+                        console.error('Received empty OTP');
+                    }
+                })
+                .then(status => {
+                    console.log("Validation status:", status);
+                    if (status >= 200 && status < 300) {
+                        location.replace("/CompanySetting");
+                    } else {
+                        console.error("Validation failed with status:", status);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during validation:', error);
+                });
         }
     }
 
@@ -103,11 +303,10 @@ const char Mainpage[] PROGMEM = R"=====(
         var modal = document.getElementById('myModal');
         modal.style.display = 'block';
         document.getElementById("button1").addEventListener("click", validation);
+
         function validation() {
             modal3.style.display = 'block';
             modal.style.display = 'none';
-
-
         }
     }
 
@@ -120,30 +319,51 @@ const char Mainpage[] PROGMEM = R"=====(
                 return response.text();
             })
             .then(data => {
+                location.replace("/");
             })
             .catch(error => {
                 console.error('Error triggering Arduino function:', error);
             });
-        location.replace("/")
     }
 
-    function RFID() {
+    function Rfid() {
         var modal = document.getElementById('myModal');
         modal.style.display = 'block';
         document.getElementById("button1").addEventListener("click", validation);
+        console.log("Rfid clicked");
         function validation() {
-            location.replace("/RFID")
+            Verification()
+                .then(otp => {
+                    if (otp) {
+                        console.log('Received OTP:', otp);
+                        return ValidationCheck(otp, "RfidRegisterPage");
+                    } else {
+                        console.error('Received empty OTP');
+                    }
+                })
+                .then(status => {
+                    console.log("Validation status:", status);
+                    if (status >= 200 && status < 300) {
+                        location.replace("/RFID");
+                    } else {
+                        console.error("Validation failed with status:", status);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during validation:', error);
+                });
         }
     }
 
-    function Update() {
 
+
+    function Update() {
         var modal = document.getElementById('myModal');
         var modal2 = document.getElementById('myModal2');
         modal.style.display = 'block';
         document.getElementById("button1").addEventListener("click", validation);
+
         function validation() {
-            <!--/Update-->
             fetch('/Update')
                 .then(response => {
                     if (!response.ok) {
@@ -152,21 +372,60 @@ const char Mainpage[] PROGMEM = R"=====(
                     return response.text();
                 })
                 .then(data => {
+                    // Hide the first modal and show the second one
+                    modal.style.display = 'none';
+                    modal2.style.display = 'block';
+
+                    // Display the reload message
+                    var messageElement = document.getElementById('reloadMessage');
+                    messageElement.innerText = "Page will be automatically reloaded in 2 seconds...";  // Set the message text
+                    messageElement.style.display = 'block';  // Show the message
+
+                    // Redirect to the home page after a short delay
+                    setTimeout(function () {
+                        location.replace("/");  // Redirect after 2 seconds
+                    }, 2000); // 2000 milliseconds = 2 seconds delay
                 })
                 .catch(error => {
                     console.error('Error triggering Arduino function:', error);
-
                 });
-            modal2.style.display = 'block';
-            modal.style.display = 'none';
-            window.close();
-            // alert("It will take some time for synchronizing");
         }
-
     }
 
-    function Restart() {
 
+
+
+
+
+
+
+    /*
+    function Update() {
+        var modal = document.getElementById('myModal');
+        var modal2 = document.getElementById('myModal2');
+        modal.style.display = 'block';
+        document.getElementById("button1").addEventListener("click", validation);
+
+        function validation() {
+            fetch('/Update')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.text();
+                })
+                .then(data => {
+                    modal2.style.display = 'block';
+                    modal.style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('Error triggering Arduino function:', error);
+                });
+        }
+    }
+        */
+
+    function Restart() {
         var modal = document.getElementById('myModal');
         var modal2 = document.getElementById('myModal2');
         modal.style.display = 'block';
@@ -180,42 +439,98 @@ const char Mainpage[] PROGMEM = R"=====(
                         throw new Error('Network response was not ok');
                     }
                     return response.text();
-
                 })
                 .then(data => {
+                    location.replace("/");
                 })
                 .catch(error => {
                     console.error('Error triggering Arduino function:', error);
-
                 });
-                location.replace("/")
         }
     }
 
     function PopupCancel() {
-        location.replace("/")
+        var modal = document.getElementById('myModal');
+        modal.style.display = 'none';
     }
+    function updateCancel() {
+        // Display the message in the reloadMessage div
+        var messageElement = document.getElementById('reloadMessage');
+        messageElement.innerText = "Page will be reloaded soon";  // Set the message text
+        messageElement.style.display = 'block';  // Show the message
+
+        // Hide the modal
+        var modal = document.getElementById('myModal');
+        modal.style.display = 'none';
+
+        // Redirect to the home page after a short delay
+        setTimeout(function () {
+            location.replace("/");  // Redirect after 2 seconds
+        }, 2000); // 2000 milliseconds = 2 seconds delay
+    }
+
 
     function HomePage() {
-        location.replace("/")
+        location.replace("/");
+    }
+    /*
+    document.addEventListener("DOMContentLoaded", (event) => {
+        console.log("DOM fully loaded and parsed");
+        clearCookies();
+    });
+
+    function clearCookies() {
+    // Check if there are any cookies preseont
+    if (document.cookie.trim() === "") {
+        return; // Exit the function if no cookies are present
     }
 
-    function PassCheck() {
-        var passwordElement = document.getElementById("txtPassword");
-        var vpasswordElement = document.getElementById("txtConfirmPassword");
-        var submitButton = document.getElementById("button1");
-
-        if (passwordElement && vpasswordElement && submitButton) {
-            var password = passwordElement.value;
-            var vpassword = vpasswordElement.value;
-
-            submitButton.disabled = password.length === 0 || password !== vpassword;
-        }
+    const cookies = document.cookie.split(";");
+    for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i];
+        const eqPos = cookie.indexOf("=");
+        const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
     }
+        */
+
+    // toggle for side bar 
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.toggle('active');
+    }
+    
+    function OfflineDataDownload() {
+    window.open("http://tictoksrfid.local/OfflineEmpLists", "_blank");
+}
+    function EmployeeDataDownload(){
+        window.open("http://tictoksrfid.local/EmployeeLists", "_blank");
+
+    }
+
+
+    // Call the function to set up the event listener when the page loads
+
+
+    // Call the function to set up the event listener when the page loads
+
+
 </script>
+
 <body>
-    <div class="toolBar-main">
-        <h3 class="toolBar-header-main" onclick="HomePage()">RFID</h3>
+    <div id="reloadMessage" style="display:none; color: red; font-weight: bold;"></div>
+    <div class="topnav">
+
+        <div class="toolBar-main">
+            <h3 class="toolBar-header-main" onclick="HomePage()">RFID</h3>
+            <div class="settings-icon" onclick="toggleSidebar()">☰</div>
+
+        </div>
+    </div>
+    <div id="sidebar" class="sidebar">
+        <h2>Menu</h2>
+        <a onclick="OfflineDataDownload()" download="OfflineData.csv">Download Offline Data</a>
+        <a onclick="EmployeeDataDownload()" download="OfflineData.csv">Download Employee Data</a>
     </div>
     <div class="container main-card">
         <div class="card">
@@ -233,11 +548,11 @@ const char Mainpage[] PROGMEM = R"=====(
                         </div>
                     </div>
                     <div class="col-md-4">
-					<div class="card1" onclick="wifiPage()">
-						<img src="/wifiImg" class="cardImg">
-						<h3>Wifi Setting</h3>
-					</div>
-				</div>
+                        <div class="card1" onclick="wifiPage()">
+                            <img src="/wifiImg" class="cardImg">
+                            <h3>Wifi Setting</h3>
+                        </div>
+                    </div>
                     <div class="col-md-4">
                         <div class="card2" onclick="CompanyPage()">
                             <img src="/companyImg" class="cardImg">
@@ -254,11 +569,12 @@ const char Mainpage[] PROGMEM = R"=====(
             </div>
             <div class="container card-row">
                 <div class="row">
-                <!-- Commented RFID -->
+
                     <div class="col-md-4">
-                        <div class="card4" onclick="RFID()">
-                            <img src="/RFIDImg" class="cardImg">
-                            <h3>RFID Register</h3>
+                        <div class="card4" onclick="Rfid()">
+                            <img src="/RFIDImg" class="cardImg" />
+                            </object>
+                            <h3>Rfid Register</h3>
                         </div>
                     </div>
                     <div class="col-md-4">
@@ -293,18 +609,18 @@ const char Mainpage[] PROGMEM = R"=====(
             <div class="popupDiv" id="form">
                 <label for="password">Password</label>
                 <input type="password" placeholder="" id="txtPassword" name="pswd1" class="form-control"
-                    onkeyup="PassCheck()"></input></br>
+                    onkeyup="AuthCheck()"></input></br>
                 <label for="password">Confirm Password</label>
                 <span style="color:red;" id="error1"></span>
-                <input type="password" placeholder="" id="txtConfirmPassword" name="pswd2" class="form-control"
-                    onkeyup="PassCheck()"></input>
+                <input type="password" placeholder="" onkeyup="AuthCheck()" id="txtConfirmPassword" name="pswd2"
+                    class="form-control"></input>
                 <div class="buttonBtn">
-                    <button type="button" id="button1" class="btn btn-primary" id="btSubmit" disabled>Submit</button>
+                    <button type="button" id="button1" cidlass="btn btn-primary" id="btSubmit" onclick="AuthCheck()"
+                        disabled>Submit</button>
                     <button type="reset" class="btn btn-primary btn_cancel" id="cancelbutton" value="Reset"
                         onclick="PopupCancel()">Cancel</button>
                 </div>
             </div>
-
         </div>
     </div>
 
@@ -333,25 +649,47 @@ const char Mainpage[] PROGMEM = R"=====(
 
 
     <!-- ***********UPDATE SUCCESS MODAL************* -->
-     <div id="myModal2" class=" modal2">
+    <div id="myModal2" class=" modal2">
         <div class="modal-content_main">
-               
+
 
             <div class="UpdateTool">
- <span class="close" onclick="PopupCancel()"   >&times;</span>
+                <span class="close" onclick="updateCancel()">&times;</span>
                 <h3>Update</h3>
             </div>
             <div class="popImg">
                 <img src="/successImg" class="SuccessImg">
             </div>
             <div class="popupDiv" id="form">
-                <h3 class="UpdateText">Please wait.. It will take time for synchronizing</h3>
+                <h3 class="UpdateText"> Successfully updated</h3>
             </div>
         </div>
     </div>
+
+
+
     <script>
-        var WifiStatus = new WebSocket('ws://' + window.location.hostname + '/Status');
-        const wifiNotConnected = `
+        document.addEventListener("DOMContentLoaded", (event) => {
+            console.log("DOM fully loaded and parsed");
+            clearCookies();
+        });
+        function clearCookies() {
+            // Get all cookies
+            const cookies = document.cookie.split(";");
+
+            // Loop through each cookie and clear it
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i];
+                const eqPos = cookie.indexOf("=");
+                const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+                // Set the cookie expiration date to the past
+                document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+            }
+        }
+        function wifiStatusInit() {
+            var WifiStatus = new WebSocket('ws://' + window.location.host + '/Status');
+            console.log(WifiStatus);
+            const wifiNotConnected = `
                                     <svg fill="#000000" height="10px" width="20px" version="1.1" id="Capa_1" viewBox="0 0 365.892 365.892" xml:space="preserve">
                                         <g>
                                             <circle  id = "circle" cx="182.945" cy="286.681" r="41.494"/>
@@ -374,8 +712,7 @@ const char Mainpage[] PROGMEM = R"=====(
                                         </g>
                                     </svg>
                                     `;
-
-        const wifiConnected = `
+            const wifiConnected = `
         <svg fill="#000000" height="10px" width="20px" version="1.1" id="Capa_1" viewBox="0 0 365.892 365.892" xml:space="preserve">
                                         <g>
                                             <circle id='circles' cx="182.945" cy="286.681" r="41.494"/>
@@ -394,7 +731,7 @@ const char Mainpage[] PROGMEM = R"=====(
                                         </g>
                                     </svg>
                                     `;
-        const InternetNotAvailable = `
+            const InternetNotAvailable = `
        <svg class='topLayer'fill="#000000" height="10px" width="20px" version="1.1" id="Capa_1" viewBox="0 0 365.892 365.892" xml:space="preserve">
                                         <g>
                                             <circle cx="182.945" cy="286.681" r="41.494"/>
@@ -414,40 +751,40 @@ const char Mainpage[] PROGMEM = R"=====(
                                         <text id="wifisvg"x="500" y="100" font-family="Arial" font-size="300" rotate="180"text-anchor="middle">i</text>
                                     </svg>
                                     `;
-        WifiStatus.onmessage = function (event) {
-            var data = event.data;
-            const svgContainer = document.getElementById('svgContainers');
-            if (data === 'Connected') {
-                if (data === 'Connected' && data !== 'Internet Not Available') {
-                    svgContainer.innerHTML = wifiConnected;
+            WifiStatus.onmessage = function (event) {
+                var data = event.data;
+                console.log("WiFi Data: " + data)
+                const svgContainer = document.getElementById('svgContainers');
+                if (data === 'Connected') {
+                    if (data === 'Connected' && data !== 'Internet Not Available') {
+                        svgContainer.innerHTML = wifiConnected;
+                    }
+
                 }
-
+                if (data === 'Internet Not Available') {
+                    svgContainer.innerHTML = InternetNotAvailable;
+                }
+                if (data === 'Not Connected') {
+                    svgContainer.innerHTML = wifiNotConnected;
+                }
             }
-            if (data === 'Internet Not Available') {
-                svgContainer.innerHTML = InternetNotAvailable;
-            }
-            if (data === 'Not Connected') {
-                svgContainer.innerHTML = wifiNotConnected;
+            WifiStatus.onclose = function (event) {
+                window.location.reload(); // Reload the page
             }
         }
-        WifiStatus.onclose = function (event) {
-            window.location.reload(); // Reload the page
-        }
-        
-
+        //setTimeout(wifiStatusInit, 2000);
         function QuickSettings() {
-
-        var modal = document.getElementById('myModal');
-        modal.style.display = 'block';
-        document.getElementById("button1").addEventListener("click", validation);
-        function validation() {
-            quickSettings();
-
-
+            var modal = document.getElementById('myModal');
+            modal.style.display = 'block';
+            document.getElementById("button1").addEventListener("click", validation);
+            function validation() {
+                quickSettings();
+            }
         }
-
-    }
+        // Settings 
     </script>
+
+
 </body>
 
 

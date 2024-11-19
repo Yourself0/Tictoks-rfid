@@ -25,8 +25,8 @@ RTC_DS3231 rtc;
 int serverUpdateCount = 0;
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
-AsyncWebSocket ws1("/Status");
-TaskHandle_t WiFiscanTaskHandle;
+// AsyncWebSocket ws1("/Status");
+// TaskHandle_t WiFiscanTaskHandle;
 TaskHandle_t UpdateEmployeeDetail;
 TaskHandle_t SpiffsOfflineDataC;
 bool EmployeeListsHigh = false;
@@ -100,17 +100,108 @@ void setupWatchdogTimer()
 void WifiStatusNotConnected()
 {
   Serial.print("Sent not connected");
-  ws1.textAll("Not Connected");
+  // ws1.textAll("Not Connected");
   digitalWrite(ORANGELED, HIGH);
 }
 
 void WifiStatusConnected()
 {
-  ws1.textAll("Connected");
+  // ws1.textAll("Connected");
   Serial.println("Sent Connected");
   digitalWrite(ORANGELED, LOW);
 }
 
+
+
+void rfidInitialCheck()
+{
+  // mountinSD();
+  if (SPIFFS.begin(true))
+  {
+    if (!SPIFFS.exists("/Rfid.csv"))
+    {
+      Serial.println("Rfid register File Doesn't Exist");
+      rfidInitialList();
+    }
+    else
+    {
+      File DataFile = SPIFFS.open("/Rfid.csv");
+      size_t fileSize = DataFile.size();
+      Serial.println("Rfid Register File Exists :");
+      Serial.println(fileSize);
+      if (fileSize == 0)
+      {
+        DataFile.close();
+        SPIFFS.remove("/Rfid.csv");
+        Serial.println("File Removed");
+      }
+      else
+      {
+        Serial.print("File Already There");
+        DataFile.close();
+      }
+    }
+  }
+  else
+  {
+    Serial.println("Sd is not There");
+  }
+}
+
+void fileReadAndWrite()
+{
+  File data = SPIFFS.open("/EmpRfid.csv", "w");
+  File datafile = SPIFFS.open("/Rfid.csv", FILE_READ);
+  if (!datafile)
+  {
+    Serial.println("Failed to open file for reading");
+    return;
+  }
+  String line;
+  bool rfidFound = false;
+  while (datafile.available())
+  {
+    line = datafile.readStringUntil('\n');
+    int commaIndex = line.indexOf(',');
+    int secondCommaIndex = line.indexOf(',', commaIndex + 1);
+    int thirdCommaIndex = line.indexOf(',', secondCommaIndex + 1);
+    int fourthCommaIndex = line.indexOf(',', thirdCommaIndex + 1);
+    int fifthCommaIndex = line.indexOf(',', fourthCommaIndex + 1);
+    int sixthCommaIndex = line.indexOf(',', fifthCommaIndex + 1);
+    if (commaIndex == -1)
+    {
+      continue;
+    }
+    // String Rfid = line.substring(0, commaIndex);
+    // String DeviceIds = line.substring(commaIndex + 1, secondCommaIndex);
+    String Empid = line.substring(secondCommaIndex + 1, thirdCommaIndex);
+    String BioTemplateId = line.substring(fifthCommaIndex + 1, sixthCommaIndex);
+    String BioRegsStatus = line.substring(sixthCommaIndex + 1);
+
+    Serial.println("BioRegsStatus: " + BioRegsStatus);
+    Serial.println("Bio Temp" + BioTemplateId);
+    int BioTemplateIntId = BioTemplateId.toInt();
+    int BioRegsIntStatus = BioRegsStatus.toInt();
+    Serial.print("bio Int id ");
+    Serial.println(BioTemplateIntId);
+    esp_task_wdt_reset();
+    if (BioTemplateIntId > 0)
+    {
+      if (BioRegsIntStatus == 1)
+      {
+        esp_task_wdt_reset();
+        String content = BioTemplateId + String(",") + Empid + "\n";
+        Serial.print("Inside Content : ");
+        Serial.println(content);
+        data.print(content);
+      }
+    }
+    // Serial.println("Rfid and Deviceids "+Rfid+" "+DeviceIds);
+    // Process the first two fields (e.g., print them)
+  }
+  data.close();
+  datafile.close();
+}
 void DeviceIdInitialize()
 {
   EEPROM.begin(512);
@@ -679,6 +770,7 @@ void WifiConnectCheck()
 }
 
 // Scanning wifi in core
+/*
 void WiFiscanTask(void *pvParameters)
 {
   for (;;)
@@ -719,6 +811,8 @@ void WiFiscanTask(void *pvParameters)
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
+
+*/
 
 void SpiffsOfflineData(void *parameter)
 {
@@ -841,7 +935,7 @@ void SpiffsOfflineData(void *parameter)
         {
           WifiStatusConnected();
           Serial.println("Internet is Not Available ........ ... ... ..");
-          ws1.textAll("Internet Not Available");
+          // ws1.textAll("Internet Not Available");
           Network_status = false;
         }
       }
@@ -1065,15 +1159,17 @@ void updateEmployeeDetails(void *pvParameters)
 void initializeCoreWork()
 {
   // Creating the WiFi scanning task on core 0
+
+  /*
   xTaskCreatePinnedToCore(
-      WiFiscanTask,        /* Task function */
-      "WiFiscan",          /* Task name */
-      8192,                /* Stack size (in words) */
-      NULL,                /* Task input parameter */
-      1,                   /* Priority of the task */
-      &WiFiscanTaskHandle, /* Task handle */
-      1                    /* Core number */
+      WiFiscanTask,
+      "WiFiscan",
+      8192,
+      1,
+      &WiFiscanTaskHandle,
+      1
   );
+  */
 
   // Update Employee Details
   xTaskCreatePinnedToCore(
@@ -1108,11 +1204,13 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   case WS_EVT_CONNECT:
     Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
     SpiffsTimerStart = false;
+    RfidRegister = true;
     break;
   case WS_EVT_DISCONNECT:
     Serial.printf("WebSocket client #%u disconnected\n", client->id());
-    RfidRegister = true;
     break;
+    RfidRegister = false;
+
   case WS_EVT_DATA:
     Serial.print("handle incomming data");
     // Handle incoming data
@@ -1382,41 +1480,6 @@ void rfidInitialList()
   digitalWrite(GREENLED1, LOW);
 }
 
-void rfidInitialCheck()
-{
-  // mountinSD();
-  if (SPIFFS.begin(true))
-  {
-    if (!SPIFFS.exists("/Rfid.csv"))
-    {
-      Serial.println("Rfid register File Doesn't Exist");
-      rfidInitialList();
-    }
-    else
-    {
-      File DataFile = SPIFFS.open("/Rfid.csv");
-      size_t fileSize = DataFile.size();
-      Serial.println("Rfid Register File Exists :");
-      Serial.println(fileSize);
-      if (fileSize == 0)
-      {
-        DataFile.close();
-        SPIFFS.remove("/Rfid.csv");
-        Serial.println("File Removed");
-      }
-      else
-      {
-        Serial.print("File Already There");
-        DataFile.close();
-      }
-    }
-  }
-  else
-  {
-    Serial.println("Sd is not There");
-  }
-}
-
 /*
 void rfidInitialCheck()
 {
@@ -1467,7 +1530,7 @@ void DeviceidFetch()
       JsonEncoder.printTo(JSONcharMessage, sizeof(JSONcharMessage));
       Serial.print("Device id data: ");
       Serial.println(JSONcharMessage);
-      http.begin("https://wildfly.letzcheckin.com:443/EmployeeAttendenceAPI/RFIDAPI/RFIDDoorMapping");
+      http.begin("https://wildfly.letzcheckin.com:443/EmployeeAttendenceAPI/RFIDAPI/GetRFIDUnMappedDeviceList");
       esp_task_wdt_reset();
       http.addHeader("Content-type", "application/json");
       httpCode = http.POST(JSONcharMessage);
@@ -1483,13 +1546,19 @@ void DeviceidFetch()
         JsonObject &root = JsonBuffer.parseObject(payload);
         if (root.success())
         {
-          JsonArray &rfidDeviceList = root["biometricDeviceList"];
+          JsonArray &rfidDeviceList = root["rfidDeviceList"];
           rfidDeviceList.printTo(DeviceList);
         }
       }
       http.end();
     }
   }
+}
+
+bool isInternetAvailable()
+{
+  WiFiClient client;
+  return client.connect("www.google.com", 80); // Check by trying to connect to Google
 }
 
 // restart the esp32
@@ -1674,6 +1743,125 @@ int fetchEmployeeDetails()
   serverOn = false;
 }
 
+void registerSendtoRfid()
+{
+  Serial.println("Reading Bios from file");
+
+  // Mount SPIFFS if not mounted already
+  if (!SPIFFS.begin(true))
+  { // true to format if failed to mount
+    Serial.println("Failed to mount SPIFFS");
+    return;
+  }
+
+  // Check Wi-Fi connection status and internet availability
+  if (WiFi.status() == WL_CONNECTED && isInternetAvailable())
+  {
+    HTTPClient http; // HTTP client instance
+
+    // Open the RfidRegisterStatus file for reading
+    File regsFilesQs = SPIFFS.open("/RfidRegisterStatus.csv", "r");
+    if (!regsFilesQs)
+    {
+      Serial.println("Failed to open file for reading");
+      return;
+    }
+
+    bool allDataSent = true; // To track if all data was sent successfully
+
+    // Read and print each line of the file
+    while (regsFilesQs.available())
+    {
+      String line = regsFilesQs.readStringUntil('\n');
+      Serial.print("Line: ");
+      Serial.println(line);
+
+      String RegEmpId = ""; // Placeholder for the employee ID
+      String id = "";       // Placeholder for the biometric template ID
+
+      // Parse the line, assuming CSV format
+      int commaIndex = line.indexOf(',');
+      if (commaIndex == -1)
+      {
+        continue; // Skip lines that don't have a comma
+      }
+
+      // Extract ID and Empid from the line
+      String rfid = line.substring(0, commaIndex);
+      String Empid = line.substring(commaIndex + 1); // Assuming Empid is the second value
+      Serial.println("Empid check: " + Empid);
+      DynamicJsonBuffer jsonBuffer;
+      Serial.println("Register to bio:");
+      Serial.println("Employee ID: " + Empid + ", Template ID: " + rfid);
+      JsonObject &JSONencoder = jsonBuffer.createObject();
+      if (rfid.length() <= 0)
+      {
+        Serial.print("File there :");
+        allDataSent = true;
+        break;
+      }
+      // JSONencoder["rfid"] = rfid;
+      // JSONencoder["employeeId"] = employeeId;
+      // jsonArrays.add(JSONencoder);
+      // Create the JSON object
+      // StaticJsonBuffer<200> jsonBuffer; // Adjust size as needed
+      JSONencoder["companyId"] = CompanyId; // Assuming CompanyId is globally defined
+      JSONencoder["employeeId"] = "001";
+      JSONencoder["registrationList"] = "{\"rfid\":\"" + rfid + "\"}";
+      // Serialize JSON to string
+      String JSONmessageBuffer;
+      JSONencoder.printTo(JSONmessageBuffer);
+      Serial.println("JSON message: ");
+      Serial.println(JSONmessageBuffer);
+
+      // Send HTTP POST request
+      http.begin("https://wildfly.letzcheckin.com:443/EmployeeAttendenceAPI/RFIDAPI/RegisterEmployeeRFIDInfo");
+      http.addHeader("Content-Type", "application/json");
+
+      int responseCode = http.POST(JSONmessageBuffer); // Send the request
+      String responseBody = http.getString();          // Get the response
+
+      // Print the response from the server
+      Serial.print("HTTP Response code: ");
+      Serial.println(responseCode);
+      Serial.print("Response body: ");
+      Serial.println(responseBody);
+
+      // Check if the POST was successful
+      if (responseCode != 200)
+      {
+        if (rfid.length() <= 0)
+        {
+          allDataSent = true;
+          break;
+        }
+        Serial.println("Failed to send data");
+        allDataSent = false; // Mark as false if any request fails
+        break;               // Stop further processing on error
+      }
+    }
+
+    regsFilesQs.close(); // Close the file after reading
+
+    // If all data was successfully sent, delete the file
+    if (allDataSent)
+    {
+      if (SPIFFS.remove("/RfidRegisterStatus.csv"))
+      {
+        Serial.println("File successfully deleted after sending all data.");
+      }
+      else
+      {
+        Serial.println("Failed to delete the file.");
+      }
+    }
+  }
+  else
+  {
+    Serial.println("Wi-Fi not connected or no internet access.");
+  }
+}
+
 // AsyncWebServer code for webpage
 void WebServerRoutes()
 {
@@ -1696,6 +1884,7 @@ void WebServerRoutes()
     Serial.print("Otp Verifiy: ");
     Serial.println(OtpVerifiy);
     ResetWebserverPages();
+    registerSendtoRfid();
     Serial.println("Reset Webserver pages called");
     // registerSendtoBios();
 
@@ -2235,11 +2424,11 @@ void WebServerRoutes()
           DynamicJsonBuffer jsonBuffers;
           JsonObject &JsonEncoder = jsonBuffers.createObject();
           JsonEncoder["companyId"] = CompanyId;
-          JsonEncoder["deviceId"] = DeviceType;
+          JsonEncoder["deviceId"] = deviceId;
           char JsonBufferMessage[500];
            JsonEncoder.printTo(JsonBufferMessage, sizeof(JsonBufferMessage));
           Serial.println(JsonBufferMessage);
-          http.begin("https://wildfly.letzcheckin.com:443/EmployeeAttendenceAPI/BiometricAPI/BioMetricDoorMapping");
+          http.begin("https://wildfly.letzcheckin.com:443/EmployeeAttendenceAPI/RFIDAPI/RFIDDoorMapping");
           http.addHeader("Content-type", "application/json");
           httpCount = http.POST(JsonBufferMessage);
           String Payload = http.getString();
@@ -2330,18 +2519,7 @@ void WebServerRoutes()
   //     Serial.print("File not Found");
   //     request->send(404, "text/plain", "FIle Not Found");
   //   } });
-  server.on("/EmployeeRfidLists", HTTP_GET, [](AsyncWebServerRequest *request)
-            {
-    File csv_File = SPIFFS.open("/EmpRfid.csv", "r");
-    if (csv_File) {
-      Serial.print("Opend csv File");
-      request->send(SPIFFS, "/EmpRfid.csv", "text/csv");
-      csv_File.close();
-    }
-    else {
-      Serial.print("File not Found");
-      request->send(404, "text/plain", "FIle Not Found");
-    } });
+  
   /// BioRegs.csv
   server.on("/EmployeeBioLists", HTTP_GET, [](AsyncWebServerRequest *request)
             {
@@ -2492,8 +2670,162 @@ void WebServerRoutes()
 */
 
   // Updated Rfid
+
+  /*
   server.on("/RfiduidUpdate", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
             { Serial.println("Rfid Update called"); });
+  */
+  /*
+    server.on("/RfiduidUpdate", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
+              {
+      HTTPClient http;
+      int httpCode = 0;
+      RfidRegister = false;
+      String lenSize = "";
+      Serial.println("button Pressed");
+      Serial.print("RFID reg");
+      Serial.println(RfidRegister);
+      String jsonString;
+      DynamicJsonBuffer jsonBuffer;
+      JsonArray& jsonArray = jsonBuffer.parseArray(data);
+      jsonArray.printTo(Serial);//fetch Response
+      JsonArray& jsonArrays = jsonBuffer.createArray();  // Replace jsonArrays with the variable/data you want to print
+      int count = 0;
+      if (jsonArray.success()) {
+        for (JsonObject& json : jsonArray) {
+          JsonObject &JSONencoder = jsonBuffer.createObject();
+          String employeeId = json["employeeId"];
+          String rfid = json["rfid"];
+          String lengthSize = json["lenSize"];
+          Serial.println(employeeId);
+          JSONencoder["rfid"] = rfid;
+          JSONencoder["employeeId"] = employeeId;
+          Serial.println(rfid);
+          jsonArrays.add(JSONencoder);
+          lenSize = lengthSize;
+          //jsonString += '\n';
+        }
+      }
+      else {
+        Serial.println("JSON parsing failed");
+      }
+      Serial.print("Array: ");
+      String rfidArray;
+      jsonArrays.printTo(rfidArray);
+      Serial.println(rfidArray);
+      Serial.print("Len Size: ");
+      Serial.println(lenSize);
+      int count = 0;
+      while(lenSize.toInt() > count){
+      JsonObject &JSONencoder = jsonBuffer.createObject();
+      Serial.print("Json Array");
+      jsonArrays.printTo(Serial);
+      char JSONmessageBuffer[500];
+      String rfidArray;
+      jsonArrays.printTo(rfidArray);
+      JSONencoder["companyId"] = CompanyId;
+      JSONencoder["employeeId"] = "001";
+      JSONencoder["registrationList"] =  rfidArray;
+      JSONencoder.printTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+      Serial.print("Encoded message");
+      Serial.println(JSONmessageBuffer);
+      // http.begin("https://wildfly.tictoks.in:443/EmployeeAttendenceAPI/RFIDAPI/RegisterEmployeeRFIDInfo");
+      // .letzcheckin.com:443
+      http.begin("https://wildfly.letzcheckin.com:443/EmployeeAttendenceAPI/RFIDAPI/RegisterEmployeeRFIDInfo");
+      http.addHeader("Content-Type", "application/json");
+      httpCode = http.POST(JSONmessageBuffer);
+      String payload = http.getString();
+      Serial.println(payload);
+      Serial.print("httpCode");
+      Serial.println(httpCode);
+      }
+
+      /*
+      JsonObject &JSONencoder = jsonBuffer.createObject();
+      Serial.print("Json Array");
+      jsonArrays.printTo(Serial);
+      char JSONmessageBuffer[500];
+      String rfidArray;
+      jsonArrays.printTo(rfidArray);
+      JSONencoder["companyId"] = CompanyId;
+      JSONencoder["employeeId"] = "001";
+      JSONencoder["registrationList"] =  rfidArray;
+      JSONencoder.printTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+      Serial.print("Encoded message");
+      Serial.println(JSONmessageBuffer);
+      http.begin("https://wildfly.tictoks.in:443/EmployeeAttendenceAPI/RFIDAPI/RegisterEmployeeRFIDInfo");
+      http.addHeader("Content-Type", "application/json");
+      httpCode = http.POST(JSONmessageBuffer);
+      String payload = http.getString();
+      Serial.println(payload);
+      Serial.print("httpCode");
+      Serial.println(httpCode);
+      ///
+      request->send(200, "text/plain", "Rfid Updated"); });
+   */
+
+  /*
+  server.on("/RfiduidUpdate", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
+            {
+    Serial.println("Button Pressed");
+    DynamicJsonBuffer jsonBuffer;
+    JsonArray& jsonArray = jsonBuffer.parseArray(data);
+
+    if (!jsonArray.success()) {
+        Serial.println("JSON parsing failed");
+        request->send(400, "application/json", "{\"status\":\"JSON parsing failed\"}");
+        return;
+    }
+
+    Serial.println("JSON Parsed Successfully");
+    String lenSize;
+    String companyId = "001";
+    JsonArray& jsonArrays = jsonBuffer.createArray();
+
+    // Parse the incoming JSON data
+    for (JsonObject& json : jsonArray) {
+        String employeeId = json["employeeId"];
+        String rfid = json["rfid"];
+        String lengthSize = json["lenSize"];
+        lenSize = lengthSize;
+
+        JsonObject& JSONencoder = jsonBuffer.createObject();
+        JSONencoder["rfid"] = rfid;
+        JSONencoder["employeeId"] = employeeId;
+        jsonArrays.add(JSONencoder);
+    }
+
+    // Create the final JSON structure
+    JsonObject& finalJson = jsonBuffer.createObject();
+    finalJson["companyId"] = companyId;
+    finalJson["employeeId"] = "001";  // Replace "001" with dynamic data if needed
+    finalJson["registrationList"] = jsonArrays;
+
+    // Convert JSON to string
+    String jsonString;
+    finalJson.printTo(jsonString);
+
+    // Append the JSON string to the file
+    File rfidregisterStatus = SPIFFS.open("/RfidRegisterStatus.json", FILE_APPEND);
+    if (!rfidregisterStatus) {
+        Serial.println("Failed to open file for appending");
+        request->send(500, "text/plain", "Failed to open file");
+        return;
+    }
+
+    if (rfidregisterStatus.print(jsonString + "\n")) {  // Add newline for readability
+        Serial.println("Data written to file: ");
+        Serial.println(jsonString);
+    } else {
+        Serial.println("Failed to write data to file");
+    }
+
+    rfidregisterStatus.close();  // Ensure file is closed properly
+
+    // Respond to the client after processing all data
+    request->send(200, "text/plain", "Rfid Updated"); });
+
+  */
   // Finger validation check MAM
 
   /*
@@ -2590,12 +2922,53 @@ void WebServerRoutes()
   });
   */
 
+  server.on("/RfiduidUpdate", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total)
+            {
+    Serial.println("Received CSV Data");
+
+    String csvData = String((char*)data);
+    Serial.println("CSV Content:");
+    Serial.println(csvData);
+
+    // Open the file for appending
+    File csvFile = SPIFFS.open("/RfidRegisterStatus.csv", FILE_WRITE);
+    if (!csvFile) {
+        Serial.println("Failed to open file for appending");
+        request->send(500, "text/plain", "Failed to open file");
+        return;
+    }
+
+    // Write the CSV data to the file
+    if (csvFile.print(csvData)) {
+        Serial.println("CSV data written successfully");
+    } else {
+        Serial.println("Failed to write CSV data");
+    }
+
+    csvFile.close(); // Ensure file is closed properly
+
+    // Respond to the client
+    request->send(200, "text/plain", "CSV Data Updated"); });
+
   server.on("/EmployeeRfidLists", HTTP_GET, [](AsyncWebServerRequest *request)
             {
     File csv_File = SPIFFS.open("/EmpRfid.csv", "r");
     if (csv_File) {
       Serial.print("Opend csv File");
       request->send(SPIFFS, "/EmpRfid.csv", "text/csv");
+      csv_File.close();
+    }
+    else {
+      Serial.print("File not Found");
+      request->send(404, "text/plain", "FIle Not Found");
+    } });
+
+  server.on("/EmployeeRegStatus", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+    File csv_File = SPIFFS.open("/RfidRegisterStatus.csv", "r");
+    if (csv_File) {
+      Serial.print("Opend csv File");
+      request->send(SPIFFS, "/RfidRegisterStatus.csv", "text/csv");
       csv_File.close();
     }
     else {
@@ -3071,7 +3444,6 @@ void setup()
   EEPROM.read(512);
   printFreeHeap("initialiazation");
   initialavailableWifi();
-  initializeCoreWork();
   //  wifiScanRequested = true; // Set the request flag
   printFreeHeap("After Core Work");
   WiFi.mode(WIFI_AP_STA);
@@ -3091,15 +3463,19 @@ void setup()
   WebServerRoutes();
   rfidInitialCheck();
   rfidInitialList();
-  spiffsFileCheck();
+  // spiffsFileCheck();
+  fileReadAndWrite();
+
+  registerSendtoRfid();
+  initializeCoreWork();
   digitalWrite(GREENLED1, LOW);
   digitalWrite(GREENLED, LOW);
   digitalWrite(REDLED1, LOW);
   digitalWrite(REDLED, LOW);
   ws.onEvent(onWsEvent);
-  ws1.onEvent(wifiStatusEvent);
+  // ws1.onEvent(wifiStatusEvent);
   server.addHandler(&ws);
-  server.addHandler(&ws1);
+  // server.addHandler(&ws1);
   printFreeHeap("After initiliazation");
   // timer.every(300000, fetchTimer_UpdateActivity);
   // timer.every(10000, SendOfflineDataSpiffs);

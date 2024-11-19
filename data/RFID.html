@@ -204,6 +204,7 @@
         // };
         var webSocket = new WebSocket('ws://' + window.location.hostname + '/ws');
         var selectedEmployeeIds = new Set();
+        /*
         webSocket.onmessage = function (event) {
     var data = JSON.parse(event.data);
     var tableBody = document.getElementById('rfidTableBody');
@@ -266,7 +267,93 @@
         ReregistryRfid = data.rfid;
     }
 };
+*/
 
+        webSocket.onmessage = function (event) {
+            var data = JSON.parse(event.data);
+            var tableBody = document.getElementById('rfidTableBody');
+            var isDuplicate = Array.from(tableBody.children).some(function (row) {
+                return row.firstChild.textContent === data.rfid;
+            });
+            isDuplicate = false;
+            if (!isDuplicate) {
+                var row = document.createElement('tr');
+                var rfidCell = document.createElement('td');
+                rfidCell.textContent = data.rfid;
+                row.appendChild(rfidCell);
+
+                // Employee select dropdown for each row
+                var employeeInfoCell = document.createElement('td');
+                var select = document.createElement('select');
+
+                // Adding initial "Select Employee" option
+                var initialOption = document.createElement('option');
+                initialOption.value = '';
+                initialOption.textContent = 'Select Employee';
+                initialOption.disabled = true; // Disable the initial option
+                initialOption.selected = true; // Select the initial option by default
+                select.appendChild(initialOption);
+
+                var employeeDetails = document.createElement('span');
+                employeeInfoCell.appendChild(select);
+                employeeInfoCell.appendChild(employeeDetails);
+
+                employeesData.forEach(function (employee) {
+                    var option = document.createElement('option');
+                    option.value = employee.employeeId;
+                    option.textContent = `${employee.employeeId} - ${employee.name} - ${employee.department}`;
+                    if (selectedEmployeeIds.has(employee.employeeId)) {
+                        option.disabled = true;
+                    }
+                    select.appendChild(option);
+                });
+
+                // Add event listener for employee selection
+                select.addEventListener('change', function () {
+                    var selectedEmployeeId = select.value;
+
+                    // Re-enable the previously selected option
+                    if (select.dataset.previousValue) {
+                        var previousValue = select.dataset.previousValue;
+                        tableBody.querySelectorAll('select').forEach(function (selectElement) {
+                            selectElement.querySelectorAll('option').forEach(function (option) {
+                                if (option.value === previousValue) {
+                                    option.disabled = false;
+                                }
+                            });
+                        });
+                        selectedEmployeeIds.delete(previousValue);
+                    }
+
+                    // Disable the newly selected option for all dropdowns
+                    tableBody.querySelectorAll('select').forEach(function (selectElement) {
+                        selectElement.querySelectorAll('option').forEach(function (option) {
+                            if (option.value === selectedEmployeeId) {
+                                option.disabled = true;
+                            }
+                        });
+                    });
+
+                    // Save the current value as the previously selected value
+                    select.dataset.previousValue = selectedEmployeeId;
+                    selectedEmployeeIds.add(selectedEmployeeId);
+
+                    // Update the employee details display
+                    var selectedEmployee = employeesData.find(function (employee) {
+                        return employee.employeeId === selectedEmployeeId;
+                    });
+                    employeeDetails.textContent = `ID: ${selectedEmployee.employeeId}`;
+                });
+
+                row.appendChild(employeeInfoCell);
+                tableBody.appendChild(row);
+            } else {
+                var modal = document.getElementById('Rfid_Uid_Modal');
+                modal.style.display = 'block';
+                ReregistryRfid = data.rfid;
+            }
+        };
+        /*
         function submit() {
             var tableBody = document.getElementById('rfidTableBody');
             var selectedData = [];
@@ -290,6 +377,7 @@
                 var rowData = {
                     rfid: rfid,
                     employeeId: selectedValue,
+                    lenSize:tableBody.rows.length
                 };
                 selectedData.push(rowData);
             }
@@ -306,6 +394,61 @@
             }
             xhttp.send(JSON.stringify(selectedData));
         }
+        */
+
+
+        function submit() {
+    var tableBody = document.getElementById('rfidTableBody');
+    var csvData = ''; // Initialize CSV data string
+    var maxLength = 3;  // Set the maximum number of rows to process
+
+    for (var i = 0; i < tableBody.rows.length; i++) {
+        var row = tableBody.rows[i];
+        var rfid = row.cells[0].textContent.trim();
+        var rowDatasSecond = row.cells[1].textContent.trim();
+        
+        // Validate that RFID and Employee ID are not empty and not malformed
+        if (rfid && rowDatasSecond) {
+            var employeeIds = rowDatasSecond.split(",");
+            employeeIds = employeeIds[0].split(":");
+
+            var selectedValue;
+            if (employeeIds[1] !== undefined) {
+                selectedValue = employeeIds[1].trim();
+            } else {
+                var employeeIds_spl = employeeIds[0].split("-");
+                selectedValue = employeeIds_spl[0].trim();
+            }
+
+            // Add row to CSV string
+            if (rfid && selectedValue) {  // Ensure both RFID and Employee ID are valid
+                csvData += `${rfid},${selectedValue}\n`;
+            }
+        }
+    }
+
+    // Check if CSV data is not empty before sending
+    if (csvData !== '') {
+        var xhttp = new XMLHttpRequest();
+        xhttp.open("POST", '/RfiduidUpdate', true);
+        xhttp.setRequestHeader("Content-Type", "text/csv");
+        xhttp.onload = function () {
+            if (xhttp.status >= 200 && xhttp.status < 300) {
+                var modal = document.getElementById('myModal_success');
+                modal.style.display = 'block';
+            } else {
+                console.error("Request failed with status:", xhttp.status);
+            }
+        }
+        xhttp.send(csvData);
+    } else {
+        console.error("No valid data to send.");
+    }
+}
+
+
+
+
         function PopupCancel() {
             location.replace("/")
         }
@@ -315,4 +458,5 @@
         }
     </script>
 </body>
+
 </html>
