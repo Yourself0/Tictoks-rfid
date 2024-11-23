@@ -95,7 +95,6 @@ TaskHandle_t OrganisationStatusC = NULL;
 void rfidInitialList();
 void OfflineDataWrite(String empId);
 
-
 void printFreeHeap(const char *position)
 {
   Serial.print(position);
@@ -123,8 +122,6 @@ void WifiStatusConnected()
   Serial.println("Sent Connected");
   digitalWrite(ORANGELED, LOW);
 }
-
-
 
 void rfidInitialCheck()
 {
@@ -215,6 +212,7 @@ void fileReadAndWrite()
   data.close();
   datafile.close();
 }
+
 void DeviceIdInitialize()
 {
   EEPROM.begin(512);
@@ -463,204 +461,227 @@ void Update_activity(String lineToDelete, String empid)
   }
 }
 
-void UpdateActivity()
+void UpdateActivity(void *pvParameters)
 {
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    if (client.connect(servername, 80))
-    {
-      serverOn = true;
-      mountingSpiffs();
-      DeviceIdInitialize();
-      int dataCount = 0;
-      int startCount = 0;
-      const int endCount = 5;
-      int loop_count = 0;
-      int httpCode = 0;
-      int falseReturn = 0;
-      DateTime now = rtc.now();
-      int minutes_start = now.minute();
-      Serial.print("Start Time :");
-      Serial.print(minutes_start);
-      do
-      {
-        digitalWrite(REDLED, HIGH);
-        digitalWrite(GREENLED, HIGH);
-        digitalWrite(REDLED1, HIGH);
-        digitalWrite(GREENLED1, HIGH);
-        HTTPClient http; // Declare object of class HTTPClient
-        // Parse the JSON data
-        DynamicJsonBuffer jsonBuffers;
-        JsonObject &JSONEncoder = jsonBuffers.createObject();
-        JSONEncoder["companyId"] = CompanyId;
-        JSONEncoder["deviceId"] = DeviceId;
-        JSONEncoder["startCount"] = startCount;
-        JSONEncoder["endCount"] = endCount;
-        char JSONmessageBuffer[500]; // Adjust the buffer size as needed
-        JSONEncoder.printTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
-        Serial.println(JSONmessageBuffer);
-        Serial.println("Hello");
-        http.begin("https://wildfly.letzcheckin.com:443/EmployeeAttendenceAPI/RFIDAPI/AutoSyncEmployeeData");
-        Serial.println("http begin");
-        http.addHeader("Content-Type", "application/json"); // Specify content-type header
-        Serial.println("Post Main");
-        // Sending requests startes here ..
-        httpCode = http.POST(JSONmessageBuffer); // Send the request
-        Serial.print("HTTP Code ");
-        Serial.println(httpCode);
-        yield();
-        String payload = http.getString();
-        char *payloadBuffer; // Adjust the size based on your requirement
-        payload.toCharArray(payloadBuffer, sizeof(payloadBuffer));
-        Serial.print("pay load :");
-        Serial.println(payload);
-        if (httpCode == 200)
-        {
-          // Convert the JSON object to a string and print it
-          Serial.println("RFID response");
-          JsonObject &root = jsonBuffers.parseObject(payload); // Parse the JSON payload dynamically
-          payload = "";
-          if (!root.success())
-          {
-            Serial.println("Parsing failed!");
-          }
-          if (root.success())
-          {
-            if (root.size() > 0)
-            {
-              Serial.println("Root success ahd have value Update");
-            }
-          }
-          Serial.print("Json string : ");
-          root.printTo(Serial);
-          Serial.print("root size :");
-          Serial.println(root.size());
-          // JsonArray& empRfidList = root["empRfidList"]; to this employeeInfoList make sure u change ...
-          JsonArray &empRfidList = root["employeeInfoList"];
-          Serial.print("Data Count :");
-          Serial.print(dataCount);
-          Serial.print("emp rfid size:");
-          Serial.print(empRfidList.size());
-          Serial.println();
-          Serial.print("JSON NODES");
-          // root.remove("employeeInfoList");
-          String jsonString;
-          empRfidList.printTo(jsonString);
-          JsonArray &nodes = jsonBuffers.parseArray(jsonString);
-          // new writting code here
-          if (!nodes.success())
-          {
-            Serial.println("parseObject() failed");
-            jsonBuffers.clear();
-          }
-          else
-          {
-            String dataCountStr = root["dataCount"].as<char *>();
-            dataCount = dataCountStr.toInt();
-            startCount += endCount;
-            int node_length = nodes.size();
-            for (int i = 0; i < node_length; i++)
-            {
-              File dataFile = SPIFFS.open("/EmpRfid.csv", "a");
-              Serial.printf("node-%i\nEmployee : ", i);
-              String empId = nodes[i]["employeeId"].as<const char *>();
-              String rfid = nodes[i]["rfidNo"].as<const char *>();
-              String Activity = nodes[i]["activity"].as<const char *>();
-              Serial.println("EmpID :");
-              Serial.println(empId);
-              Serial.print("RFID : ");
-              Serial.println(rfid);
-              if (Activity == "Add_Employee")
-              {
-                if (rfid.equals(""))
-                {
-                  rfid = "0";
-                  Serial.println("Rfid Empty");
-                }
-                String empData = "";
-                // newly added ..
-                Serial.println("RFID:");
-                Serial.println(rfid.c_str());
-                empData = rfid + String(",") + empId + String("\n"); // Writting employee data to SPIFFS
-                Serial.println(empData.c_str());
-                dataFile.print(empData);
-                Serial.println("Written");
-                dataFile.close();
-              }
-              else if (Activity == "Update_Employee")
-              {
-                // check file and update the employee
-                Update_activity(rfid, empId);
-              }
-              else if (Activity == "Deleted_Employee")
-              {
-                Delete_activity(rfid, empId);
-              }
-              else if (Activity == "UnBlocked_Employee")
-              {
-                Update_activity(rfid, empId);
-              }
-              else if (Activity == "Blocked_Employee")
-              {
-                Delete_activity(rfid, empId);
-              }
-              else if (Activity == "UnLocked_Employee")
-              {
-                Update_activity(rfid, empId);
-              }
-              else if (Activity == "Locked_Employee")
-              {
-                Delete_activity(rfid, empId);
-              }
-            }
-            Serial.println("Forloop end ");
-          }
-          Serial.println("ELSe end ");
-          // Close connection
-          yield();
-          Serial.println(httpCode);
-          Serial.println("SucessFully Stored RFID Values");
-        }
-        else
-        {
-          falseReturn += 1;
-          if (falseReturn > 50)
-          {
-            Serial.println("Http response Failed");
-            digitalWrite(REDLED, LOW);
-            digitalWrite(GREENLED, LOW);
-            digitalWrite(REDLED1, LOW);
-            digitalWrite(GREENLED1, LOW);
-            serverOn = false;
-            http.end();
-            break;
-          }
-        }
-        http.end();
-      } while (dataCount >= startCount);
+  (void)pvParameters; // Unused parameter 
 
-      int minute_end = now.minute();
-      int total_minutes = minutes_start - minute_end;
-      Serial.print("total Time Took : ");
-      Serial.println(total_minutes);
-      // SPI.begin();         // Init SPI bus
-      for (uint8_t reader = 0; reader < NO_OF_READERS; reader++)
+  while (true)
+  {
+    Serial.println("first delay started");
+    vTaskDelay(pdMS_TO_TICKS(600000)); // Delay for 10 minutes
+    Serial.println("first delay Ended");
+    Serial.println("second Delay");
+    vTaskDelay(pdMS_TO_TICKS(600000)); // Delay for 10 minutes
+    Serial.println("Second delay Ended");
+    Serial.println("second Delay");    
+    vTaskDelay(pdMS_TO_TICKS(600000)); // Delay for 10 minutes
+    if (true)
+    {
+      if (WiFi.status() == WL_CONNECTED)
       {
-        mfrc522[reader].PCD_Reset(); // Perform a software reset
-        mfrc522[reader].PCD_Init();  // Init MFRC522
+        if (client.connect(servername, 80))
+        {
+          serverOn = true;
+          mountingSpiffs();
+          DeviceIdInitialize();
+          int dataCount = 0;
+          int startCount = 0;
+          const int endCount = 5;
+          int loop_count = 0;
+          int httpCode = 0;
+          int falseReturn = 0;
+          DateTime now = rtc.now();
+          int minutes_start = now.minute();
+          Serial.print("Start Time :");
+          Serial.print(minutes_start);
+          do
+          {
+            digitalWrite(REDLED, HIGH);
+            digitalWrite(GREENLED, HIGH);
+            digitalWrite(REDLED1, HIGH);
+            digitalWrite(GREENLED1, HIGH);
+            HTTPClient http; // Declare object of class HTTPClient
+            // Parse the JSON data
+            DynamicJsonBuffer jsonBuffers;
+            JsonObject &JSONEncoder = jsonBuffers.createObject();
+            JSONEncoder["companyId"] = CompanyId;
+            JSONEncoder["deviceId"] = DeviceId;
+            JSONEncoder["startCount"] = startCount;
+            JSONEncoder["endCount"] = endCount;
+            char JSONmessageBuffer[500]; // Adjust the buffer size as needed
+            JSONEncoder.printTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+            Serial.println(JSONmessageBuffer);
+            Serial.println("Hello");
+            http.begin("https://wildfly.letzcheckin.com:443/EmployeeAttendenceAPI/RFIDAPI/AutoSyncEmployeeData");
+            Serial.println("http begin");
+            http.addHeader("Content-Type", "application/json"); // Specify content-type header
+            Serial.println("Post Main");
+            // Sending requests startes here ..
+            httpCode = http.POST(JSONmessageBuffer); // Send the request
+            Serial.print("HTTP Code ");
+            Serial.println(httpCode);
+            yield();
+            String payload = http.getString();
+            char *payloadBuffer; // Adjust the size based on your requirement
+            payload.toCharArray(payloadBuffer, sizeof(payloadBuffer));
+            Serial.print("pay load :");
+            Serial.println(payload);
+            if (httpCode == 200)
+            {
+              // Convert the JSON object to a string and print it
+              Serial.println("RFID response");
+              JsonObject &root = jsonBuffers.parseObject(payload); // Parse the JSON payload dynamically
+              payload = "";
+              if (!root.success())
+              {
+                Serial.println("Parsing failed!");
+              }
+              if (root.success())
+              {
+                if (root.size() > 0)
+                {
+                  Serial.println("Root success ahd have value Update");
+                }
+              }
+              Serial.print("Json string : ");
+              root.printTo(Serial);
+              Serial.print("root size :");
+              Serial.println(root.size());
+              // JsonArray& empRfidList = root["empRfidList"]; to this employeeInfoList make sure u change ...
+              JsonArray &empRfidList = root["employeeInfoList"];
+              Serial.print("Data Count :");
+              Serial.print(dataCount);
+              Serial.print("emp rfid size:");
+              Serial.print(empRfidList.size());
+              Serial.println();
+              Serial.print("JSON NODES");
+              // root.remove("employeeInfoList");
+              String jsonString;
+              empRfidList.printTo(jsonString);
+              JsonArray &nodes = jsonBuffers.parseArray(jsonString);
+              // new writting code here
+              if (!nodes.success())
+              {
+                Serial.println("parseObject() failed");
+                jsonBuffers.clear();
+              }
+              else
+              {
+                String dataCountStr = root["dataCount"].as<char *>();
+                dataCount = dataCountStr.toInt();
+                startCount += endCount;
+                int node_length = nodes.size();
+                for (int i = 0; i < node_length; i++)
+                {
+                  File dataFile = SPIFFS.open("/EmpRfid.csv", "a");
+                  Serial.printf("node-%i\nEmployee : ", i);
+                  String empId = nodes[i]["employeeId"].as<const char *>();
+                  String rfid = nodes[i]["rfidNo"].as<const char *>();
+                  String Activity = nodes[i]["activity"].as<const char *>();
+                  Serial.println("EmpID :");
+                  Serial.println(empId);
+                  Serial.print("RFID : ");
+                  Serial.println(rfid);
+                  if (Activity == "Add_Employee")
+                  {
+                    if (rfid.equals(""))
+                    {
+                      rfid = "0";
+                      Serial.println("Rfid Empty");
+                    }
+                    String empData = "";
+                    // newly added ..
+                    Serial.println("RFID:");
+                    Serial.println(rfid.c_str());
+                    empData = rfid + String(",") + empId + String("\n"); // Writting employee data to SPIFFS
+                    Serial.println(empData.c_str());
+                    dataFile.print(empData);
+                    Serial.println("Written");
+                    dataFile.close();
+                  }
+                  else if (Activity == "Update_Employee")
+                  {
+                    // check file and update the employee
+                    Update_activity(rfid, empId);
+                  }
+                  else if (Activity == "Deleted_Employee")
+                  {
+                    Delete_activity(rfid, empId);
+                  }
+                  else if (Activity == "UnBlocked_Employee")
+                  {
+                    Update_activity(rfid, empId);
+                  }
+                  else if (Activity == "Blocked_Employee")
+                  {
+                    Delete_activity(rfid, empId);
+                  }
+                  else if (Activity == "UnLocked_Employee")
+                  {
+                    Update_activity(rfid, empId);
+                  }
+                  else if (Activity == "Locked_Employee")
+                  {
+                    Delete_activity(rfid, empId);
+                  }
+                }
+                Serial.println("Forloop end ");
+              }
+              Serial.println("ELSe end ");
+              // Close connection
+              yield();
+              Serial.println(httpCode);
+              Serial.println("SucessFully Stored RFID Values");
+            }
+            else
+            {
+              falseReturn += 1;
+              if (falseReturn > 50)
+              {
+                Serial.println("Http response Failed");
+                digitalWrite(REDLED, LOW);
+                digitalWrite(GREENLED, LOW);
+                digitalWrite(REDLED1, LOW);
+                digitalWrite(GREENLED1, LOW);
+                serverOn = false;
+                http.end();
+                break;
+              }
+            }
+            http.end();
+          } while (dataCount >= startCount);
+
+          int minute_end = now.minute();
+          int total_minutes = minutes_start - minute_end;
+          Serial.print("total Time Took : ");
+          Serial.println(total_minutes);
+          // SPI.begin();         // Init SPI bus
+          for (uint8_t reader = 0; reader < NO_OF_READERS; reader++)
+          {
+            mfrc522[reader].PCD_Reset(); // Perform a software reset
+            mfrc522[reader].PCD_Init();  // Init MFRC522
+          }
+          EEPROM.write(510, 1);
+          EEPROM.commit(); // Save data to EEPROM
+          // return httpCode;
+        }
       }
-      EEPROM.write(510, 1);
-      EEPROM.commit(); // Save data to EEPROM
-      // return httpCode;
+      digitalWrite(REDLED, LOW);
+      digitalWrite(GREENLED, LOW);
+      digitalWrite(REDLED1, LOW);
+      digitalWrite(GREENLED1, LOW);
+      serverOn = false;
     }
+
+    vTaskDelay(30000 / portTICK_PERIOD_MS);
   }
-  digitalWrite(REDLED, LOW);
-  digitalWrite(GREENLED, LOW);
-  digitalWrite(REDLED1, LOW);
-  digitalWrite(GREENLED1, LOW);
-  serverOn = false;
 }
 
+
+
+
+
+/*
 bool fetchTimer_UpdateActivity(void *)
 {
   if (!fetchRunning_update)
@@ -682,6 +703,7 @@ bool fetchTimer_UpdateActivity(void *)
   }
   return true;
 }
+*/
 
 bool SendOfflineDataSpiffs(void *)
 {
@@ -974,7 +996,6 @@ void SpiffsOfflineData(void *parameter)
 
 */
 
-
 long TokenVerifications()
 {
   long randomNumber = random(100000, 1000000);
@@ -995,7 +1016,7 @@ void updateEmployeeDetails(void *pvParameters)
   for (;;)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    if (UpdateEmployee)
+    if (true)
     {
       if (WiFi.status() == WL_CONNECTED)
       {
@@ -1010,7 +1031,7 @@ void updateEmployeeDetails(void *pvParameters)
           int loop_count = 0;
           int httpCode = 0;
           int falseReturn = 0;
-          File dataFile = SPIFFS.open("/EmpRfid.csv", "w");
+          File dataFile = SPIFFS.open("/Rfid.csv", "w");
           if (!dataFile)
           {
             Serial.println("Failed to open file for writing");
@@ -1098,7 +1119,7 @@ void updateEmployeeDetails(void *pvParameters)
                 int node_length = nodes.size();
                 for (int i = 0; i < node_length; i++)
                 {
-                  File dataFile = SPIFFS.open("/EmpRfid.csv", "a");
+                  File dataFile = SPIFFS.open("/Rfid.csv", "a");
                   Serial.printf("node-%i\nEmployee : ", i);
                   String empId = nodes[i]["employeeId"].as<const char *>();
                   String rfid = nodes[i]["rfidNo"].as<const char *>();
@@ -1154,6 +1175,7 @@ void updateEmployeeDetails(void *pvParameters)
           EEPROM.write(510, 1);
           EEPROM.commit(); // Save data to EEPROM
           UpdateEmployee = false;
+          fileReadAndWrite();
         }
         else
         {
@@ -1169,11 +1191,9 @@ void updateEmployeeDetails(void *pvParameters)
       digitalWrite(REDLED1, LOW);
       digitalWrite(GREENLED1, LOW);
     }
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(30000 / portTICK_PERIOD_MS);
   }
 }
-
-
 
 /*
 
@@ -1181,7 +1201,7 @@ void initializeCoreWork()
 {
   // Creating the WiFi scanning task on core 0
 
-  
+
   xTaskCreatePinnedToCore(
       WiFiscanTask,
       "WiFiscan",
@@ -1215,8 +1235,6 @@ void initializeCoreWork()
   //  xTaskNotify(SpiffsOfflineDataC, 1, eSetValueWithOverwrite); // Notify the task
 }
 */
-
-
 
 void SdOfflineData(void *parameter)
 {
@@ -1381,7 +1399,6 @@ void SdOfflineData(void *parameter)
   }
 }
 
-
 void wifiStatusData(void *pvParameters)
 {
   (void)pvParameters;
@@ -1482,7 +1499,6 @@ void CloseDoor(void *pvParameters)
   }
 }
 
-
 void initializeCoreWork()
 {
   // Check WiFi status data task, assigned highest priority
@@ -1529,18 +1545,15 @@ void initializeCoreWork()
 
   // Uncomment this if needed, with appropriate priority
   xTaskCreate(
-      updateEmployeeDetails,  // Task function
-      "UpdateEmployee",       // Task name
-      8192,                   // Stack size (bytes)
-      NULL,                   // Task input parameter
-      2,                      // Priority (Lower)
-      &UpdateEmployeeDetailC  // Task handle
+      // updateEmployeeDetails,  // Task function
+      UpdateActivity,
+      "UpdateEmployee",      // Task name
+      8192,                  // Stack size (bytes)
+      NULL,                  // Task input parameter
+      2,                     // Priority (Lower)
+      &UpdateEmployeeDetailC // Task handle
   );
-  
 }
-
-
-
 
 // WebSocket event Handle
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
@@ -2123,8 +2136,8 @@ void registerSendtoRfid()
       Serial.print("Line: ");
       Serial.println(line);
 
-      String RegEmpId = ""; // Placeholder for the employee ID
-      String id = "";       // Placeholder for the biometric template ID
+      String rfid = "";  // Placeholder for the RFID value
+      String Empid = ""; // Placeholder for the employee ID
 
       // Parse the line, assuming CSV format
       int commaIndex = line.indexOf(',');
@@ -2133,32 +2146,32 @@ void registerSendtoRfid()
         continue; // Skip lines that don't have a comma
       }
 
-      // Extract ID and Empid from the line
-      String rfid = line.substring(0, commaIndex);
-      String Empid = line.substring(commaIndex + 1); // Assuming Empid is the second value
+      // Extract RFID and Empid from the line
+      rfid = line.substring(0, commaIndex);
+      Empid = line.substring(commaIndex + 1); // Assuming Empid is the second value
       Serial.println("Empid check: " + Empid);
+
       DynamicJsonBuffer jsonBuffer;
-      Serial.println("Register to bio:");
-      Serial.println("Employee ID: " + Empid + ", Template ID: " + rfid);
-      JsonObject &JSONencoder = jsonBuffer.createObject();
-      if (rfid.length() <= 0)
-      {
-        Serial.print("File there :");
-        allDataSent = true;
-        break;
-      }
-      // JSONencoder["rfid"] = rfid;
-      // JSONencoder["employeeId"] = employeeId;
-      // jsonArrays.add(JSONencoder);
-      // Create the JSON object
-      // StaticJsonBuffer<200> jsonBuffer; // Adjust size as needed
-      JSONencoder["companyId"] = CompanyId; // Assuming CompanyId is globally defined
-      JSONencoder["employeeId"] = "001";
-      JSONencoder["registrationList"] = "{\"rfid\":\"" + rfid + "\"}";
-      // Serialize JSON to string
+      JsonObject &jsonDoc = jsonBuffer.createObject();
+
+      // Prepare a JSON array for registrationList
+      JsonArray &registrationList = jsonBuffer.createArray();
+      // Create an object for the RFID entry
+      JsonObject &rfidEntry = jsonBuffer.createObject();
+      rfidEntry["rfid"] = rfid;        // Assign the RFID value to the object
+      rfidEntry["employeeId"] = Empid;
+      registrationList.add(rfidEntry); // Add the object to the array
+      //Convert to String ...
+      String regsLists ="";
+      registrationList.printTo(regsLists);
+      // Build the main JSON object
+      jsonDoc["companyId"] = CompanyId;               // Assuming CompanyId is globally defined
+      // jsonDoc["employeeId"] = "001";                  // Employee ID from file
+      jsonDoc["registrationList"] = regsLists; // Assign the array to the JSON object
       String JSONmessageBuffer;
-      JSONencoder.printTo(JSONmessageBuffer);
-      Serial.println("JSON message: ");
+      jsonDoc.printTo(JSONmessageBuffer);
+
+      Serial.println("JSON Payload: ");
       Serial.println(JSONmessageBuffer);
 
       // Send HTTP POST request
@@ -2168,7 +2181,7 @@ void registerSendtoRfid()
       int responseCode = http.POST(JSONmessageBuffer); // Send the request
       String responseBody = http.getString();          // Get the response
 
-      // Print the response from the server
+      // Print the server response
       Serial.print("HTTP Response code: ");
       Serial.println(responseCode);
       Serial.print("Response body: ");
@@ -2177,11 +2190,6 @@ void registerSendtoRfid()
       // Check if the POST was successful
       if (responseCode != 200)
       {
-        if (rfid.length() <= 0)
-        {
-          allDataSent = true;
-          break;
-        }
         Serial.println("Failed to send data");
         allDataSent = false; // Mark as false if any request fails
         break;               // Stop further processing on error
@@ -2866,7 +2874,7 @@ void WebServerRoutes()
   //     Serial.print("File not Found");
   //     request->send(404, "text/plain", "FIle Not Found");
   //   } });
-  
+
   /// BioRegs.csv
   server.on("/EmployeeBioLists", HTTP_GET, [](AsyncWebServerRequest *request)
             {
@@ -3400,8 +3408,6 @@ void sendMessageToWsClient(String rfid)
   ws.textAll(message);
 }
 
-
-
 int ServerSend(String Empid, String companyId)
 {
   Serial.print("Empid ");
@@ -3439,7 +3445,7 @@ int ServerSend(String Empid, String companyId)
   Serial.print("JSON MESSAGE server send");
   Serial.println(JSONmessageBuffer);
   http.begin("http://3.6.171.29:8080/EmployeeAttendenceAPI/employee/EmployeeCheckInOut"); // Specify request destination
-  http.addHeader("Content-Type", "application/json");                                         // Specify content-type header
+  http.addHeader("Content-Type", "application/json");                                     // Specify content-type header
   Serial.println("Here after content type");
   int httpCode = http.POST(JSONmessageBuffer); // Send the request
   Serial.print("HttpCode:");
@@ -3553,8 +3559,6 @@ int ServerSend(String Empid, String companyId)
   // delay(1000);
   return 1;
 }
-
-
 
 // Function For Sending data to Backend
 /*
@@ -3731,9 +3735,7 @@ void OfflineDataWrite(String empId)
   Serial.println("File closed");
 }
 
-
 // Match rfid File
-
 
 bool matchRfid(String MatchedRfid)
 {
@@ -3834,9 +3836,6 @@ bool matchRfid(String MatchedRfid)
   vTaskDelay(pdMS_TO_TICKS(2000));
   return validRfid;
 }
-
-
-
 
 // Function for checking rfid with employee rfid and getting employee's info
 /*
@@ -4074,7 +4073,7 @@ void setup()
   InitializeRfid();
   WebServerRoutes();
   rfidInitialCheck();
-  rfidInitialList();
+  // rfidInitialList();
   // spiffsFileCheck();
   fileReadAndWrite();
 
