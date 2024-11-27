@@ -1,7 +1,5 @@
 const char Mainpage[] PROGMEM = R"=====(
 
-
-
 <!DOCTYPE html>
 <html>
 
@@ -174,6 +172,11 @@ const char Mainpage[] PROGMEM = R"=====(
                 margin-left: 0;
                 padding-top: 60px;
             }
+        }
+
+        h6#Firmware_version_update {
+            padding: 15px 20px;
+            margin: 5px;
         }
     </style>
 </head>
@@ -499,11 +502,11 @@ const char Mainpage[] PROGMEM = R"=====(
         const sidebar = document.getElementById('sidebar');
         sidebar.classList.toggle('active');
     }
-    
+
     function OfflineDataDownload() {
-    window.open("http://tictoksrfid.local/OfflineEmpLists", "_blank");
-}
-    function EmployeeDataDownload(){
+        window.open("http://tictoksrfid.local/OfflineEmpLists", "_blank");
+    }
+    function EmployeeDataDownload() {
         window.open("http://tictoksrfid.local/EmployeeLists", "_blank");
 
     }
@@ -531,6 +534,7 @@ const char Mainpage[] PROGMEM = R"=====(
         <h2>Menu</h2>
         <a onclick="OfflineDataDownload()" download="OfflineData.csv">Download Offline Data</a>
         <a onclick="EmployeeDataDownload()" download="OfflineData.csv">Download Employee Data</a>
+        <h6 id="Firmware_version_update"></h6>
     </div>
     <div class="container main-card">
         <div class="card">
@@ -592,6 +596,7 @@ const char Mainpage[] PROGMEM = R"=====(
                 </div>
             </div>
         </div>
+
     </div>
 
 
@@ -672,7 +677,23 @@ const char Mainpage[] PROGMEM = R"=====(
         document.addEventListener("DOMContentLoaded", (event) => {
             console.log("DOM fully loaded and parsed");
             clearCookies();
+            firmwareversioncheck();
         });
+
+        function firmwareversioncheck() {
+            fetch('http://192.168.0.101/FirmwareVersion')
+                .then(response => response.text()) // Assuming the server returns plain text
+                .then(data => {
+                    // Update the content of the <h6> element
+                    console.log(data);
+                    document.getElementById("Firmware_version_update").innerText = "Firmware Version: "+data;
+                })
+                .catch(error => {
+                    // Handle errors and display a message
+                    console.error("Error fetching firmware version:", error);
+                    document.getElementById("Firmware_version_update").innerText = "Failed to fetch firmware version.";
+                });
+        }
         function clearCookies() {
             // Get all cookies
             const cookies = document.cookie.split(";");
@@ -789,4 +810,7 @@ const char Mainpage[] PROGMEM = R"=====(
 
 
 </html>
+
+
+
 )=====";
