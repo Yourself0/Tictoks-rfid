@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#define FirmwareVer "0.0"
+#define FirmwareVer "0.1"
 #include <FS.h>
 #include <WiFi.h>
 #include <Wire.h>
@@ -85,13 +85,14 @@ const char *APASS = "123456789";
 const char *host = "www.google.com";
 
 /*Git hub updated url*/
+
 const int gitport = 443;
 const char *gitHost = "raw.githubusercontent.com";
 #define URL_fw_Version "https://raw.githubusercontent.com/Yourself0/Throughapps_rfid/main/firmware_version.txt"
 #define URL_fw_Bin "https://raw.githubusercontent.com/Yourself0/Throughapps_rfid/main/firmware.bin"
 
 
-String hostName = "tictoksbiometric";
+String hostName = "tictoksrfid";
 
 // Registering RFIDS
 
@@ -2417,6 +2418,7 @@ void InitialSpiffs()
 }
 
 // we will be using websocke to communicate with web for RFID
+
 // Sending message to WebSocket Client .. /
 void sendMessageToWsClient(String rfid)
 {
@@ -2875,6 +2877,10 @@ void loop()
 spiffsFileCheck was removed
 
 */
+
+
+
+
 
 /*                                 Git Update Start                                   */
 

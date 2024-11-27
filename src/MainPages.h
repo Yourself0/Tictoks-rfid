@@ -681,7 +681,7 @@ const char Mainpage[] PROGMEM = R"=====(
         });
 
         function firmwareversioncheck() {
-            fetch('http://192.168.0.101/FirmwareVersion')
+            fetch('/FirmwareVersion')
                 .then(response => response.text()) // Assuming the server returns plain text
                 .then(data => {
                     // Update the content of the <h6> element
