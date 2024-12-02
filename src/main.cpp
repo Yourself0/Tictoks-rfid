@@ -2873,13 +2873,8 @@ void loop()
 }
 
 /*
-
 spiffsFileCheck was removed
-
 */
-
-
-
 
 
 /*                                 Git Update Start                                   */
