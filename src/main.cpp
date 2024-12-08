@@ -8,7 +8,6 @@
 #include <EEPROM.h>
 #include <ESPmDNS.h>
 #include <MFRC522.h> // RFID Library
-#include "MainPages.h"
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
 #include <HTTPClient.h>
@@ -271,6 +270,7 @@ void DeviceIdInitialize()
 }
 
 // Initiliaze RFID Reader
+/*
 void InitializeRfid()
 {
   SPI.begin();
@@ -281,6 +281,34 @@ void InitializeRfid()
     Serial.println(reader);
     Serial.println(F(": "));
     mfrc522[reader].PCD_DumpVersionToSerial();
+  }
+}
+
+*/
+
+
+void InitializeRfid() {
+  SPI.begin();  // Start SPI communication
+
+  for (uint8_t reader = 0; reader < NO_OF_READERS; reader++) {
+    Serial.print(F("Initializing RFID reader "));
+    Serial.println(reader);
+
+    mfrc522[reader].PCD_Init(ssPins[reader], RST_PIN);  // Initialize reader
+
+    delay(100);  // Allow the module to stabilize
+
+    // Check firmware version
+    Serial.print(F("RFID "));
+    Serial.print(reader);
+    Serial.print(F(": Firmware Version: "));
+    byte version = mfrc522[reader].PCD_ReadRegister(MFRC522::VersionReg);
+
+    if (version == 0x0) {
+      Serial.println(F("Unknown (communication failure)"));
+    } else {
+      mfrc522[reader].PCD_DumpVersionToSerial();
+    }
   }
 }
 
@@ -1687,7 +1715,8 @@ void WebServerRoutes()
     ResetWebserverPages();
     registerSendtoRfid();
     Serial.println("Reset Webserver pages called");
-    request->send(200, "text/html", Mainpage); 
+    request->send(SPIFFS, "/MainPage.html", "text/html");
+    // request->send(200, "text/html", Mainpage); 
     Serial.println("Response sent"); });
 
   // Images
@@ -2787,11 +2816,11 @@ void setup()
   Serial.print("CompanyId");
   Serial.println(CompanyId);
   InitializeRTC();
+  InitializeRfid();
   mountingSpiffs();
   CompanyIdCheck();
   DeviceIdInitialize();
   WifiConnectCheck();
-  InitializeRfid();
   WebServerRoutes();
   rfidInitialCheck();
   fileReadAndWrite();
@@ -2867,7 +2896,7 @@ void loop()
       }
     }
   }
-  timer.tick();
+  // timer.tick();
 
   wifiConnectedCheckerMin();
 }
