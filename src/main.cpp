@@ -1,13 +1,13 @@
 #include <Arduino.h>
 #define FirmwareVer "0.1"
 #include <FS.h>
+#include <SPI.h>
 #include <WiFi.h>
 #include <Wire.h>
 #include <RTClib.h> //For RTC DS3231
 #include <SPIFFS.h>
 #include <EEPROM.h>
 #include <ESPmDNS.h>
-#include <MFRC522.h> // RFID Library
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
 #include <HTTPClient.h>
@@ -17,6 +17,8 @@
 #include <esp_task_wdt.h>
 #include <arduino-timer.h>
 #include <ESPAsyncWebServer.h>
+#include <MFRC522.h>
+#include <MFRC522Extended.h>
 
 auto timer = timer_create_default(); // create a timer with default settings
 bool Network_status = true;
@@ -90,7 +92,6 @@ const char *gitHost = "raw.githubusercontent.com";
 #define URL_fw_Version "https://raw.githubusercontent.com/Yourself0/Throughapps_rfid/main/firmware_version.txt"
 #define URL_fw_Bin "https://raw.githubusercontent.com/Yourself0/Throughapps_rfid/main/firmware.bin"
 
-
 String hostName = "tictoksrfid";
 
 // Registering RFIDS
@@ -121,7 +122,6 @@ void rfidInitialList();
 void FirmwareUpdate();
 bool pingServer();
 void MDNSServer();
-
 
 void printFreeHeap(const char *position)
 {
@@ -286,17 +286,19 @@ void InitializeRfid()
 
 */
 
-
-void InitializeRfid() {
-  SPI.begin();  // Start SPI communication
-
-  for (uint8_t reader = 0; reader < NO_OF_READERS; reader++) {
+/**/
+void InitializeRfid()
+{
+  SPI.begin(); // Start SPI communication
+  mfrc522->PCD_SoftPowerUp();
+  for (uint8_t reader = 0; reader < NO_OF_READERS; reader++)
+  {
     Serial.print(F("Initializing RFID reader "));
     Serial.println(reader);
 
-    mfrc522[reader].PCD_Init(ssPins[reader], RST_PIN);  // Initialize reader
+    mfrc522[reader].PCD_Init(ssPins[reader], RST_PIN); // Initialize reader
 
-    delay(100);  // Allow the module to stabilize
+    delay(100); // Allow the module to stabilize
 
     // Check firmware version
     Serial.print(F("RFID "));
@@ -304,9 +306,12 @@ void InitializeRfid() {
     Serial.print(F(": Firmware Version: "));
     byte version = mfrc522[reader].PCD_ReadRegister(MFRC522::VersionReg);
 
-    if (version == 0x0) {
+    if (version == 0x0)
+    {
       Serial.println(F("Unknown (communication failure)"));
-    } else {
+    }
+    else
+    {
       mfrc522[reader].PCD_DumpVersionToSerial();
     }
   }
@@ -456,7 +461,7 @@ void UpdateActivity(void *pvParameters)
     Serial.println("Second delay Ended");
     Serial.println("second Delay");
     vTaskDelay(pdMS_TO_TICKS(600000)); // Delay for 10 minutes
-    
+
     // Test
     // vTaskDelay(pdMS_TO_TICKS(10000)); // Delay for 10 minutes
 
@@ -692,6 +697,11 @@ void InitializeRTC()
   }
   else
   {
+    if (rtc.lostPower())
+    {
+      Serial.println("RTC is Turned off and Adjusted the time");
+      rtc.adjust(DateTime(F(__DATE__), (F(__TIME__))));
+    }
     Serial.println("RTC is RUNNING");
     DateTime now = rtc.now();
     Serial.print(now.year());
@@ -1103,7 +1113,6 @@ void SdOfflineData(void *parameter)
     Serial.println("End of send server ");
     vTaskDelay(pdMS_TO_TICKS(60000));
   }
-  
 }
 
 void wifiStatusData(void *pvParameters)
@@ -2409,10 +2418,8 @@ void WebServerRoutes()
       request->send(404, "text/plain", "FIle Not Found");
     } });
 
-
   server.on("/FirmwareVersion", HTTP_GET, [](AsyncWebServerRequest *request)
-            { request->send(200, "text/plain",FirmwareVer); 
-            });
+            { request->send(200, "text/plain", FirmwareVer); });
   server.begin();
 }
 
@@ -2802,11 +2809,22 @@ void MDNSServer()
 // *Setup
 void setup()
 {
+
   Serial.begin(115200);
   EEPROM.read(512);
+  // while (!Serial); // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
+  // pinMode(SS_1_PIN, HIGH);
+  // digitalWrite(SS_2_PIN, HIGH);
+  // digitalWrite(SS_1_PIN, HIGH);
+  // digitalWrite(SS_2_PIN, HIGH);
+  // delay(1000);
   printFreeHeap("initialiazation");
+  // digitalWrite(SS_1_PIN, LOW);
+  // digitalWrite(SS_2_PIN, LOW);
+  delay(1000);
   initialavailableWifi();
-  printFreeHeap("After Core Work");
+  InitializeRfid();
+  // printFreeHeap("After Core Work");
   WiFi.mode(WIFI_AP_STA);
   // WIFI Access point Initilaization ..
   softAp();
@@ -2816,7 +2834,6 @@ void setup()
   Serial.print("CompanyId");
   Serial.println(CompanyId);
   InitializeRTC();
-  InitializeRfid();
   mountingSpiffs();
   CompanyIdCheck();
   DeviceIdInitialize();
@@ -2842,7 +2859,7 @@ void setup()
 // RFID card reading loop.
 void loop()
 {
-  ws.cleanupClients();
+  // ws.cleanupClients();
   // Serial.println("Loop");
   // Reset the Watchdog Timer
   unsigned long currentMillis = millis();
@@ -2904,7 +2921,6 @@ void loop()
 /*
 spiffsFileCheck was removed
 */
-
 
 /*                                 Git Update Start                                   */
 
